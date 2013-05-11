@@ -21,19 +21,24 @@
 local udp = ngx.socket.udp
 local timerat = ngx.timer.at
 local time = ngx.time
+local null = ngx.null
+
 local insert = table.insert
 local concat = table.concat
+
 local sub = string.sub
 local len = string.len
 local find = string.find
 local gmatch = string.gmatch
-local null = ngx.null
+local format = string.format
+
 local pairs = pairs
 local unpack = unpack
 local setmetatable = setmetatable
 local tonumber = tonumber
 local tostring = tostring
 local error = error
+
 local sync = require "openstreetmap.sync"
 
 module(...)
@@ -90,87 +95,12 @@ local function deserialize_tirex_msg (str)
     return msg
 end
 
--- function: connect
---
-function connect(self, tirexpath)
-    local sock = self.sock
-    if not sock then
-        return nil, "not initialized"
-    end
-    return sock:setpeername(tirexpath)
-end
-
--- function: enqueue
--- arguments: string map
---            number x, y, z, priority
--- return id
---
-function enqueue (self, map, x, y, z, priority)
-    local sock = self.sock
-    if not sock then
-        return nil, "not initialized"
-    end
-    local id = time()
-    local mx = x - x % 8
-    local my = y - y % 8
-    local req = serialize_tirex_msg({
-        ["id"]   = tostring(id);
-        ["type"] = 'metatile_enqueue_request';
-        ["prio"] = priority;
-        ["map"]  = map;
-        ["x"]    = mx;
-        ["y"]    = my;
-        ["z"]    = z})
-    local ok, err = sock:send(req)
-    if not ok then
-        return nil, err
-    end
-    return id, nil
-end
-
--- function: read_reply
--- arguments: number id
--- return     msg, err
---
-function _read_reply (sock)
-    local data, err = sock:receive()
-    if not data then
-        return nil, err
-    end
-    local msg = deserialize_tirex_msg(tostring(data))
-    local gotid = msg["id"]
-    if tonumber(gotid) ~= tonumber(id) then
-        -- push it for other client
-        -- check whehter other client got it
-        return msg, nil
-    else
-        return msg, nil
-    end
-end
-
-function set_timeout(self, timeout)
-    local sock = self.sock
-    if not sock then
-        return nil, "not initialized"
-    end
-
-    return sock:settimeout(timeout)
-end
-
-function close(self)
-    local sock = self.sock
-    if not sock then
-        return nil, "not initialized"
-    end
-
-    return sock:close()
-end
-
-
 -- ========================================================
 --  It does not share context and global vals/funcs
 --
-tirex_handler = function (premature)
+local tirex_handler
+tirex_handler = function (premature, shmem)
+    local status = shmem
     local tirexsock = 'unix:/var/run/tirex/master.sock'
     local tirex_cmd_max_size = 512
     local cmds = ngx.shared.cmds
@@ -187,14 +117,14 @@ tirex_handler = function (premature)
 
     for i = 0, 10000 do
         -- send all requests first...
-        local indexes = cmds:get_keys()
+        local indexes = status:get_keys()
         for key,index in pairs(indexes) do
-            local req = cmds:get(index)
+            local req = status:get(index)
             local ok,err=udpsock:send(req)
             if not ok then
                 ngx.log(ngx.DEBUG, err)
             else
-                cmds:delete(index)
+                status:delete(index)
             end
         end
         -- then receive response
@@ -202,15 +132,15 @@ tirex_handler = function (premature)
         if data then
             -- deserialize
             local msg = {}
-            for line in string.gmatch(data, "[^\n]+") do
-                m,_,k,v = string.find(line,"([^=]+)=(.+)")
+            for line in gmatch(data, "[^\n]+") do
+                m,_,k,v = find(line,"([^=]+)=(.+)")
                 if  k ~= '' then
                     msg[k]=v
                 end
             end
-            local resp = string.format("%s:%d:%d:%d", msg["map"], msg["x"], msg["y"], msg["z"])
+            local resp = format("%s:%d:%d:%d", msg["map"], msg["x"], msg["y"], msg["z"])
             -- send_signal to client context
-            local ok, err = stats:incr(resp, 1)
+            local ok, err = status:incr(resp, 1)
             if not ok then
                 ngx.log(ngx.DEBUG, "error in incr")
             end
@@ -220,30 +150,23 @@ tirex_handler = function (premature)
     end
     udpsock:close()
     -- call myself
-    ngx.timer.at(0.1, tirex_handler)
+    timerat(0.1, tirex_handler, status)
 end
 -- ========================================================
 
-function push_request_tirex_render(index,req)
-    local cmds = ngx.shared.cmds
-    return cmds:safe_add(index, req, 0, 0)
+function push_request_tirex_render(self, index, req)
+    local status = self.shmem
+    return status:safe_add(index, req, 0, 0)
 end
 
-function start_handler_if_needed()
-    local handle = get_handle('_tirex_handler', 0, 0)
-    if handle then
-        -- only single light thread can handle Tirex
-        ngx.log(ngx.INFO, "start tirex_handler")
-        ngx.timer.at(0, tirex_handler)
-    end
-end
 
 -- function: request_tirex_render
 --  enqueue request to tirex server
 --
 function request_tirex_render(map, mx, my, mz, id)
+    local status = self.shmem
     -- Create request command
-    local index = string.format("%s:%d:%d:%d",map, mx, my, mz)
+    local index = format("%s:%d:%d:%d",map, mx, my, mz)
     local priority = 8
     local req = serialize_msg({
         ["id"]   = tostring(id);
@@ -254,34 +177,47 @@ function request_tirex_render(map, mx, my, mz, id)
         ["y"]    = my;
         ["z"]    = mz})
     push_request_tirex_render(index, req)
-    start_handler_if_needed()
-    return ngx.OK
+
+    local handle = sync.get_handle('_tirex_handler', 0, 0)
+    if handle then
+        -- only single light thread can handle Tirex
+        timerat(0, tirex_handler, status)
+    end
+
+    return true
 end
 
 -- funtion: send_tirex_request
 -- argument: map, x, y, z
 -- return:   true or nil
 --
-function send_tirex_request (map, x, y, z)
+function send_tirex_request (self, map, x, y, z)
     local mx = x - x % 8
     local my = y - y % 8
     local mz = z
-    local id = ngx.time()
-    local index = string.format("%s:%d:%d:%d",map, mx, my, mz)
+    local id = ngx_time()
+    local index = format("%s:%d:%d:%d",map, mx, my, mz)
 
-    local ok, err = get_handle(index, tirex_sync_duration, id)
+    local ok, err = sync.get_handle(index, tirex_sync_duration, id)
     if not ok then
         -- someone have already start Tirex session
         -- wait other side(*), sync..
-        return wait_signal(index, 30)
+        return sync.wait_signal(index, 30)
     end
 
     -- Ask Tirex session
     local ok = request_tirex_render(map, mx, my, mz, id)
     if not ok then
-        return ngx.exit(ngx.HTTP_INTERNAL_SERVER_ERROR)
+        return nil
     end
-    return wait_signal(index, 30)
+    return sync.wait_signal(index, 30)
 end
 
+local class_mt = {
+    -- to prevent use of casual module global variables
+    __newindex = function (table, key, val)
+        error('attempt to write to undeclared variable "' .. key .. '"')
+    end
+}
 
+setmetatable(_M, class_mt)
