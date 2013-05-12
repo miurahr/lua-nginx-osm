@@ -18,24 +18,28 @@ http://wiki.nginx.org/HttpLuaModule
 This Lua library takes advantage of ngx_lua's cosocket API, which ensures 
 100% nonblocking behavior.
 
-Note that at least [ngx_lua 0.8.1](https://github.com/chaoslawful/lua-nginx-module/tags) or [ngx_openresty 1.2.1.14](http://openresty.org/#Download) is required.
+Note that at least [ngx_lua 0.8.1](https://github.com/chaoslawful/lua-nginx-module/tags) is required.
 
 Synopsis
 ========
 
-    lua_package_path "/path/to/lua-nginx-osm/lib/?.lua;;";
+    lua_package_path "/path/to/lua-nginx-osm/?.lua;;";
+    lua_shared_dict osm_tirex 10m; ## mandatory to use osm.tirex module
+    lua_socket_log_errors off;
 
     server {
         location /example {
             content_by_lua '
-                local osm_tirex = require "osm.tirex"
-                local osm_tile = require "osm.tile"
+                local tirex = require "osm.tirex"
+                local tile = require "osm.tile"
+		local data = require "osm.data"
                 
                 -- --------------------------------------------------
                 -- check uri
                 -- --------------------------------------------------
                 local uri = ngx.var.uri
-                local x, y, z = osm_tile.get_cordination(uri, "example", ".png")
+		local map = 'example'
+                local x, y, z = tile.get_cordination(uri, map, ".png")
                 if not x then
                     return ngx.exit(ngx.HTTP_FORBIDDEN)
                 end
@@ -43,56 +47,41 @@ Synopsis
                 -- check x, y, z range
                 local max_zoom = 18
                 local min_zoom = 5
-                if not osm_tile.check_integrity_xyzm(x, y, z, minz, maxz) then
+                if not tile.check_integrity_xyzm(x, y, z, minz, maxz) then
                     return ngx.exit(ngx.HTTP_FORBIDDEN)
                 end
                 
                 -- check x, y, z supported to generate
-                local region = "japan"
+		local region = data.get_region('japan')
                 if not osm_tile.region_include(region, x, y, z)
                     return ngx.exit(ngx.HTTP_FORBIDDEN)
                 end
                 
-                -- --------------------------------------------------
-                -- generate tile and send back it
-                -- --------------------------------------------------
-                local tirex = osm_tirex:new()
-                tirex:set_timeout(1000) -- 1 sec
-                local ok, err = tirex:connect("unix:/var/run/tirex/master.sock")
+                -- try renderd file.
+                local png, err = tile.get_tile(map, x, y, z)
+                if png then
+                    ngx.header.content_type = 'image/png'
+                    ngx.print(png)
+                    return ngx.OK
+                end
+		
+                -- ask tirex to render it
+                local ok = tirex.send_request(map, x, y, z)
                 if not ok then
-                    ngx.say("failed to connect: ", err)
-                    return
+                    return ngx.exit(ngx.HTTP_INTERNAL_SERVER_ERROR)
                 end
-                local map = "example"
-                local priority = 8
-                local id, err = tirex:enqueue (map, x, y, z, priority)
-                if not id then
-                    ngx.say("failed to request tile generation: ", err)
-                    return
+
+		-- get tile image from metatile
+                local tilefile = tile.xyz_to_metatile_filename(x, y, z)
+                local tilepath = tirex_tilepath..'/'..map..'/'..tilefile
+                local png, err = osm_tile.get_tile(tilepath, x, y, z)
+                if png then
+                    ngx.header.content_type = 'image/png'
+                    ngx.print(png)
+                    return ngx.OK
                 end
-    
-                local res, err = tirex:result(id)
-                if not res then
-                    ngx.say("failed to get result: ", err)
-                    return
-                end
-    
-                if res == ngx.null then
-                    ngx.say("rendering failed.")
-                    return
-                end
-                
-                ok, err = tirex:close()
-                if not ok then
-                    ngx.say("failed to close: ", err)
-                    return
-                end
-                
-                local meta = tile.xyz_to_metatile_filename(x, y, z)
-                ok, err = tile.send_tile(meta, x, y)
-                if not ok then
-                    ngx.say("failed to send tile:", err)
-                end
+                ngx.log(ngx.ERR, err)
+                return ngx.exit(ngx.HTTP_NOT_FOUND)
             ';
         }
     }
@@ -100,8 +89,7 @@ Synopsis
 Methods
 =======
 
-All of the Tirex commands have their own methods with the same name except all in lower case.
-
+only send_request() is supported.
 
 TODO
 ====
@@ -136,14 +124,12 @@ Hiroshi Miura <miurahr@osmf.jp>, OpenStreetMap Foundation Japan
 Copyright and License
 =====================
 
-Hiroshi Miura, 2013
+Hiroshi Miura, 2013 
 
 Distributed under GPLv3
 
 See Also
 ========
 * the ngx_lua module: http://wiki.nginx.org/HttpLuaModule
-* the [lua-resty-memcached](https://github.com/agentzh/lua-resty-memcached) library
-* the [lua-resty-mysql](https://github.com/agentzh/lua-resty-mysql) library
 
 

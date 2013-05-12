@@ -47,19 +47,6 @@ module(...)
 
 _VERSION = '0.10'
 
-local mt = { __index = _M }
-
--- Constructor
---
-function new(self)
-    local sock, err = udp()
-    if not sock then
-        return nil, err
-    end
-    return setmetatable({ sock = sock }, mt)
-end
-
-
 -- ------------------------------------
 -- Syncronize thread functions
 --
@@ -101,7 +88,7 @@ end
 --  if key exist, it returns false
 --  else it returns true
 --
-local function get_handle(self, key, timeout, flag)
+function get_handle(key, timeout, flag)
     local success,err,forcible = shmem:add(key, 0, timeout, flag)
     if success ~= false then
         return key, ''
@@ -111,7 +98,7 @@ end
 
 -- return nil if timeout in wait
 --
-local function wait_signal(self, key, timeout)
+function wait_signal(key, timeout)
     local timeout = tonumber(timeout)
     for i=0, timeout do
         local val, flag = shmem:get(key)
@@ -127,13 +114,13 @@ local function wait_signal(self, key, timeout)
     return nil
 end
 
--- function: serialize_tirex_msg
+-- function: serialize_msg
 -- argument: table msg
 --     hash table {key1=val1, key2=val2,....}
 -- return: string
 --     should be 'key1=val1\nkey2=val2\n....\n'
 --
-local function serialize_tirex_msg (msg)
+function serialize_msg (msg)
     local str = ''
     for k,v in pairs(msg) do
         str = str .. k .. '=' .. tostring(v) .. '\n'
@@ -141,12 +128,12 @@ local function serialize_tirex_msg (msg)
     return str
 end
 
--- function: deserialize_tirex_msg
+-- function: deserialize_msg
 -- arguments: string str: recieved message from tirex
 --     should be 'key1=val1\nkey2=val2\n....\n'
 -- return: table
 --     hash table {key1=val1, key2=val2,....}
-local function deserialize_tirex_msg (str) 
+function deserialize_msg (str) 
     local msg = {}
     for line in gmatch(str, "[^\n]+") do
         m,_,k,v = find(line,"([^=]+)=(.+)")
@@ -217,17 +204,11 @@ tirex_handler = function (premature)
     -- call myself
     timerat(0.1, tirex_handler)
 end
--- ========================================================
-
-function push_request_tirex_render(self, index, req)
-    return shmem:set(index, req, 0, 1)
-end
-
 
 -- function: request_tirex_render
 --  enqueue request to tirex server
 --
-function request_tirex_render(map, mx, my, mz, id)
+function request_render(map, mx, my, mz, id)
     -- Create request command
     local index = format("%s:%d:%d:%d",map, mx, my, mz)
     local priority = 8
@@ -239,7 +220,10 @@ function request_tirex_render(map, mx, my, mz, id)
         ["x"]    = mx;
         ["y"]    = my;
         ["z"]    = mz})
-    push_request_tirex_render(index, req)
+    local ok, err, forcible = shmem:set(index, req, 0, 1)
+    if not ok then
+        return nil, err
+    end
 
     local handle = get_handle('_tirex_handler', 0, 0)
     if handle then
@@ -250,15 +234,15 @@ function request_tirex_render(map, mx, my, mz, id)
     return true
 end
 
--- funtion: send_tirex_request
+-- funtion: send_request
 -- argument: map, x, y, z
 -- return:   true or nil
 --
-function send_tirex_request (self, map, x, y, z)
+function send_request (map, x, y, z)
     local mx = x - x % 8
     local my = y - y % 8
     local mz = z
-    local id = ngx_time()
+    local id = time()
     local index = format("%s:%d:%d:%d",map, mx, my, mz)
 
     local ok, err = get_handle(index, 300, 0)
@@ -269,7 +253,7 @@ function send_tirex_request (self, map, x, y, z)
     end
 
     -- Ask Tirex session
-    local ok = request_tirex_render(map, mx, my, mz, id)
+    local ok = request_render(map, mx, my, mz, id)
     if not ok then
         return nil
     end

@@ -60,7 +60,7 @@ function deg2num(lon, lat, zoom)
     local lon_deg = tonumber(lon)
     local lat_rad = rad(lat)
     local xtile = floor(n * ((lon_deg + 180) / 360))
-    local ytile = floor(n * (1 - (log(tan(lat_rad) + (1 / cos(lat_rad))) / math.pi)) / 2)
+    local ytile = floor(n * (1 - (log(tan(lat_rad) + (1 / cos(lat_rad))) / pi)) / 2)
     return xtile, ytile
 end
 
@@ -146,22 +146,22 @@ function get_tile(metafilename, x, y)
         return nil, err
     end
     local metatile_header_size = 532 -- XXX: 20 + 8 * 64
-    local header, err = io_read(fd, metatile_header_size)
+    local header, err = fd:read(metatile_header_size)
     if header == nil then
-        io_close(fd)
+        fd:close()
         return nil, err
     end
     -- offset: lookup table in header
     local pib = 20 + ((y % 8) * 8) + ((x % 8) * 8 * 8 )
     local offset = get_offset(header, pib)
     local size = get_offset(header, pib+4)
-    io_seek(fd, "set", offset)
-    local png, err = io_read(fd, size)
+    fd:seek("set", offset)
+    local png, err = fd:read(size)
     if png == nil then
-        io_close(fd)
+        fd:close()
         return nil, err
     end
-    io_close(fd)
+    fd:close()
     return png, nil
 end
 
