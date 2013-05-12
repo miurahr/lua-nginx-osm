@@ -18,10 +18,6 @@
 --    along with this program.  If not, see <http://www.gnu.org/licenses/>.
 --
 
-local ngx_log = ngx.log
-local ngx_var = ngx.var
-local ngx_print = ngx.print
-local sleep = ngx.sleep
 local sub = string.sub
 local find = string.find
 local tonumber = tonumber

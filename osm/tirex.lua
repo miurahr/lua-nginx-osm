@@ -22,6 +22,7 @@ local udp = ngx.socket.udp
 local timerat = ngx.timer.at
 local time = ngx.time
 local null = ngx.null
+local sleep = ngx.sleep
 
 local insert = table.insert
 local concat = table.concat
@@ -39,8 +40,6 @@ local tonumber = tonumber
 local tostring = tostring
 local error = error
 
-local sync = require "openstreetmap.sync"
-
 module(...)
 
 _VERSION = '0.10'
@@ -53,18 +52,96 @@ function new(self, shmem)
     if not shmem then
         return nil
     end
-    local sync = sync:new(shmem)
-    if not sync then
+    local key="openstreetmap_"..tostring(math:rand())
+    success, err, forcible=shmem:add(key, 0, 0, 0)
+    if not success then
         return nil
+    else
+        ok,err = shmem:delete(key)
     end
     local sock, err = udp()
     if not sock then
         return nil, err
     end
-    return setmetatable({ sock = sock, shmem = shmem, sync = sync }, mt)
+    return setmetatable({ sock = sock, shmem = shmem, wait_interval = 1 }, mt)
 end
 
 
+-- ------------------------------------
+-- Syncronize thread functions
+--
+--   thread(1)
+--       get_handle(key)
+--       do work
+--       store work result somewhere
+--       send_signal(key)
+--       return result
+--
+--   thread(2)
+--       get_handle(key) fails then
+--       wait_singal(key)
+--       return result what thread(1) done
+--
+--   to syncronize amoung nginx threads
+--   we use ngx.shared.DICT interface.
+--   
+--   Here we use ngx.shared.stats
+--   you need to set /etc/conf.d/lua.conf
+--      ngx_shared_dict stats 10m; 
+--
+--   if these functions returns 'nil'
+--   status is undefined
+--   something wrong
+--
+--   status definitions
+--    key is not exist:    neutral
+--    key is exist: someone got work token
+--       val = 0:     now working
+--       val > 0:     work is finished
+--
+--    key will be expired in timeout sec
+--    we can use same key after timeout passed
+--
+-- ------------------------------------
+
+--
+--  if key exist, it returns false
+--  else it returns true
+--
+local function get_handle(self, key, timeout, flag)
+    local shmem = self.shmem
+    local success,err,forcible = shmem:add(key, 0, timeout, flag)
+    if success ~= false then
+        return key, ''
+    end
+    return nil, ''
+end
+
+-- returns new value (maybe 1)
+local function send_signal(self, key)
+    local shmem = self.shmem
+    return shmem:incr(key, 1)
+end
+
+-- return nil if timeout in wait
+--
+local function wait_signal(self, key, timeout)
+    local shmem = self.shmem
+    local interval = self.wait_interval
+    local timeout = tonumber(timeout)
+    for i=0, timeout do
+        local val, id = shmem:get(key)
+        if val then
+            if val > 0 then
+                return id
+            end
+            sleep(interval)
+        else
+            return nil
+        end
+    end
+    return nil
+end
 -- function: serialize_tirex_msg
 -- argument: table msg
 --     hash table {key1=val1, key2=val2,....}
@@ -178,7 +255,7 @@ function request_tirex_render(map, mx, my, mz, id)
         ["z"]    = mz})
     push_request_tirex_render(index, req)
 
-    local handle = sync.get_handle('_tirex_handler', 0, 0)
+    local handle = get_handle('_tirex_handler', 0, 0)
     if handle then
         -- only single light thread can handle Tirex
         timerat(0, tirex_handler, status)
@@ -198,11 +275,11 @@ function send_tirex_request (self, map, x, y, z)
     local id = ngx_time()
     local index = format("%s:%d:%d:%d",map, mx, my, mz)
 
-    local ok, err = sync.get_handle(index, tirex_sync_duration, id)
+    local ok, err = get_handle(index, tirex_sync_duration, id)
     if not ok then
         -- someone have already start Tirex session
         -- wait other side(*), sync..
-        return sync.wait_signal(index, 30)
+        return wait_signal(index, 30)
     end
 
     -- Ask Tirex session
@@ -210,7 +287,7 @@ function send_tirex_request (self, map, x, y, z)
     if not ok then
         return nil
     end
-    return sync.wait_signal(index, 30)
+    return wait_signal(index, 30)
 end
 
 local class_mt = {

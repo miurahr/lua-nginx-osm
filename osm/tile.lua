@@ -34,9 +34,6 @@ local io_open = io.open
 local io_read = io.read
 local io_close = io.close
 local io_seek = io.seek
-local ngx_header = ngx.header
-local ngx_log = ngx.log
-local ngx_print = ngx.print
 
 module(...)
 
@@ -138,8 +135,8 @@ end
 -- 
 --  send back tile to client from metatile
 --
-function send(filename, x, y)
-    local imgfile = filename
+function get_tile(metafilename, x, y)
+    local imgfile = metafilename
     local fd, err = io_open(imgfile,"rb")
     if fd == nil then
         return nil, err
@@ -160,10 +157,8 @@ function send(filename, x, y)
         io_close(fd)
         return nil, err
     end
-    ngx_header.content_type = 'image/png'
-    ngx_print(png)
     io_close(fd)
-    return true
+    return png, nil
 end
 
 local class_mt = {
