@@ -28,7 +28,10 @@ local rad = math.rad
 local deg = math.deg
 local floor = math.floor
 local log = math.log
+local sub = string.sub
+local find = string.find
 local tonumber = tonumber
+local tostring = tostring
 local pairs = pairs
 local io_open = io.open
 local io_read = io.read
@@ -159,6 +162,48 @@ function get_tile(metafilename, x, y)
     end
     io_close(fd)
     return png, nil
+end
+
+
+function get_cordination(uri, base, ext)
+    local uri = tostring(uri)
+    local captures = ''
+    if ext == '' then
+        captures = "^"..base.."/(%d+)/(%d+)/(%d+)"
+    elseif sub(ext, 1) ~= '.' then
+        captures = "^"..base.."/(%d+)/(%d+)/(%d+)"..'.'..ext
+    else
+        captures = "^"..base.."/(%d+)/(%d+)/(%d+)"..ext
+    end
+    local s,_,oz,ox,oy = find(uri, captures)
+    if s == nil then
+        return nil
+    end
+    return tonumber(ox), tonumber(oy), tonumber(oz)
+end
+
+function check_integrity_xyzm(x, y, z, minz, maxz)
+    local x = tonumber(x)
+    local y = tonumber(y)
+    local z = tonumber(z)
+    local minz = tonumber(minz)
+    local maxz = tonumber(maxz)
+    if z < minz or z > maxz then
+        return nil
+    end
+    local lim = 2 ^ z
+    if x < 0 or x >= lim or y < 0 or y >= lim then
+        return nil
+    end
+    return true
+end
+
+function check_integrity_xyz(x, y, z)
+    local lim = 2 ^ z
+    if x < 0 or x >= lim or y < 0 or y >= lim then
+        return nil
+    end
+    return true
 end
 
 local class_mt = {

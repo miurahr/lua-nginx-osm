@@ -28,7 +28,6 @@ Synopsis
     server {
         location /example {
             content_by_lua '
-                local osm_utils = require "osm.utils"
                 local osm_tirex = require "osm.tirex"
                 local osm_tile = require "osm.tile"
                 
@@ -36,7 +35,7 @@ Synopsis
                 -- check uri
                 -- --------------------------------------------------
                 local uri = ngx.var.uri
-                local x, y, z = osm_utils.get_cordination(uri, "example", ".png")
+                local x, y, z = osm_tile.get_cordination(uri, "example", ".png")
                 if not x then
                     return ngx.exit(ngx.HTTP_FORBIDDEN)
                 end
@@ -44,13 +43,13 @@ Synopsis
                 -- check x, y, z range
                 local max_zoom = 18
                 local min_zoom = 5
-                if not check_integrity_xyzm(x, y, z, minz, maxz) then
+                if not osm_tile.check_integrity_xyzm(x, y, z, minz, maxz) then
                     return ngx.exit(ngx.HTTP_FORBIDDEN)
                 end
                 
                 -- check x, y, z supported to generate
                 local region = "japan"
-                if not region_include(region, x, y, z)
+                if not osm_tile.region_include(region, x, y, z)
                     return ngx.exit(ngx.HTTP_FORBIDDEN)
                 end
                 
