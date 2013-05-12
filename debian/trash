@@ -1,0 +1,6 @@
+debian/lua-nginx-osm.install
+debian/lua-nginx-osm-dev.install
+debian/lua_versions
+debian/lua-nginx-osm.install
+debian/lua-nginx-osm-dev.install
+debian/lua_versions

@@ -1,0 +1,6 @@
+lua-nginx-osm (0.10-1) precise; urgency=low
+
+  * Initial release.
+
+ -- Hiroshi Miura <miurahr@linux.com>  Sun, 12 May 2013 11:27:52 +0900
+
