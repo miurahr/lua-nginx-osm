@@ -28,9 +28,9 @@ Synopsis
     server {
         location /example {
             content_by_lua '
-                local osm_utils = require "openstreetmap.utils"
-                local osm_tirex = require "openstreetmap.tirex"
-                local osm_tile = require "openstreetmap.tile"
+                local osm_utils = require "osm.utils"
+                local osm_tirex = require "osm.tirex"
+                local osm_tile = require "osm.tile"
                 
                 -- --------------------------------------------------
                 -- check uri
