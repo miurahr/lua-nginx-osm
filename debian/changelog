@@ -1,3 +1,9 @@
+lua-nginx-osm (0.10-2) precise; urgency=low
+
+  * Add tirex dependency
+
+ -- Hiroshi Miura <miurahr@linux.com>  Sun, 12 May 2013 23:34:46 +0900
+
 lua-nginx-osm (0.10-1) precise; urgency=low
 
   * Initial release.
