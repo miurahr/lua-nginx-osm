@@ -53,7 +53,7 @@ Synopsis
                 
                 -- check x, y, z supported to generate
                 local region = data.get_region("japan")
-                if not osm_tile.region_include(region, x, y, z)
+                if not osm_tile.is_inside_region(region, x, y, z)
                     return ngx.exit(ngx.HTTP_FORBIDDEN)
                 end
                 
@@ -127,10 +127,10 @@ check_integrity_xyz
 
 Same as check_integrity_xyzm() but don't check z range.
 
-region_include
+is_inside_region
 --------
 
-**syntax:** *include = osm.tile.region_include(region, x, y, z)*
+**syntax:** *include = osm.tile.is_inside_region(region, x, y, z)*
 
 Check x/y/z cordination is located and inside of region.
 region should be get from 'osm.data'
