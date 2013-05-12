@@ -25,6 +25,8 @@ local sleep = ngx.sleep
 local sub = string.sub
 local find = string.find
 local tonumber = tonumber
+local tostring = tostring
+local setmetatable = setmetatable
 
 module(...)
 
@@ -33,12 +35,14 @@ _VERSION = '0.10'
 local mt = { __index = _M }
 
 function get_cordination(uri, base, ext)
+    local uri = tostring(uri)
+    local captures = ''
     if ext == '' then
-        local captures = "^"..base.."/(%d+)/(%d+)/(%d+)"
+        captures = "^"..base.."/(%d+)/(%d+)/(%d+)"
     elseif sub(ext, 1) ~= '.' then
-        local captures = "^"..base.."/(%d+)/(%d+)/(%d+)"..'.'..ext
+        captures = "^"..base.."/(%d+)/(%d+)/(%d+)"..'.'..ext
     else
-        local captures = "^"..base.."/(%d+)/(%d+)/(%d+)"..ext
+        captures = "^"..base.."/(%d+)/(%d+)/(%d+)"..ext
     end
     local s,_,oz,ox,oy = find(uri, captures)
     if s == nil then
@@ -48,6 +52,11 @@ function get_cordination(uri, base, ext)
 end
 
 function check_integrity_xyzm(x, y, z, minz, maxz)
+    local x = tonumber(x)
+    local y = tonumber(y)
+    local z = tonumber(z)
+    local minz = tonumber(minz)
+    local maxz = tonumber(maxz)
     if z < minz or z > maxz then
         return nil
     end
