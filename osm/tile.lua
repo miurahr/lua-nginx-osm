@@ -37,6 +37,7 @@ local io_open = io.open
 local io_read = io.read
 local io_close = io.close
 local io_seek = io.seek
+local setmetatable = setmetatable
 
 module(...)
 

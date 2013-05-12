@@ -18,6 +18,8 @@
 --    along with this program.  If not, see <http://www.gnu.org/licenses/>.
 --
 
+local shmem = ngx.shared.osm_tirex
+
 local udp = ngx.socket.udp
 local timerat = ngx.timer.at
 local time = ngx.time
@@ -39,6 +41,7 @@ local setmetatable = setmetatable
 local tonumber = tonumber
 local tostring = tostring
 local error = error
+local setmetatable = setmetatable
 
 module(...)
 
@@ -48,22 +51,12 @@ local mt = { __index = _M }
 
 -- Constructor
 --
-function new(self, shmem)
-    if not shmem then
-        return nil
-    end
-    local key="openstreetmap_"..tostring(math:rand())
-    success, err, forcible=shmem:add(key, 0, 0, 0)
-    if not success then
-        return nil
-    else
-        ok,err = shmem:delete(key)
-    end
+function new(self)
     local sock, err = udp()
     if not sock then
         return nil, err
     end
-    return setmetatable({ sock = sock, shmem = shmem, wait_interval = 1 }, mt)
+    return setmetatable({ sock = sock }, mt)
 end
 
 
@@ -109,7 +102,6 @@ end
 --  else it returns true
 --
 local function get_handle(self, key, timeout, flag)
-    local shmem = self.shmem
     local success,err,forcible = shmem:add(key, 0, timeout, flag)
     if success ~= false then
         return key, ''
@@ -117,31 +109,24 @@ local function get_handle(self, key, timeout, flag)
     return nil, ''
 end
 
--- returns new value (maybe 1)
-local function send_signal(self, key)
-    local shmem = self.shmem
-    return shmem:incr(key, 1)
-end
-
 -- return nil if timeout in wait
 --
 local function wait_signal(self, key, timeout)
-    local shmem = self.shmem
-    local interval = self.wait_interval
     local timeout = tonumber(timeout)
     for i=0, timeout do
-        local val, id = shmem:get(key)
+        local val, flag = shmem:get(key)
         if val then
-            if val > 0 then
-                return id
+            if flag == 3 then
+                return true
             end
-            sleep(interval)
+            sleep(1)
         else
             return nil
         end
     end
     return nil
 end
+
 -- function: serialize_tirex_msg
 -- argument: table msg
 --     hash table {key1=val1, key2=val2,....}
@@ -176,16 +161,14 @@ end
 --  It does not share context and global vals/funcs
 --
 local tirex_handler
-tirex_handler = function (premature, shmem)
-    local status = shmem
+tirex_handler = function (premature)
     local tirexsock = 'unix:/var/run/tirex/master.sock'
     local tirex_cmd_max_size = 512
-    local cmds = ngx.shared.cmds
-    local stats = ngx.shared.stats
+    local shmem = ngx.shared.osm_tirex
 
     if premature then
         -- clean up
-        stats:delete('_tirex_handler')
+        shmem:delete('_tirex_handler')
         return
     end
 
@@ -194,14 +177,18 @@ tirex_handler = function (premature, shmem)
 
     for i = 0, 10000 do
         -- send all requests first...
-        local indexes = status:get_keys()
+        local indexes = shmem:get_keys(10)
         for key,index in pairs(indexes) do
-            local req = status:get(index)
-            local ok,err=udpsock:send(req)
-            if not ok then
-                ngx.log(ngx.DEBUG, err)
-            else
-                status:delete(index)
+	    if index ~= '_tirex_handler' then
+                local req, flag = shmem:get(index)
+		if flag == 1 then
+                    local ok,err=udpsock:send(req)
+                    if not ok then
+                        ngx.log(ngx.DEBUG, err)
+                    else
+                        shmem:replace(index, req, 300, 2)
+	            end
+                end
             end
         end
         -- then receive response
@@ -215,9 +202,10 @@ tirex_handler = function (premature, shmem)
                     msg[k]=v
                 end
             end
-            local resp = format("%s:%d:%d:%d", msg["map"], msg["x"], msg["y"], msg["z"])
+            local index = format("%s:%d:%d:%d", msg["map"], msg["x"], msg["y"], msg["z"])
+
             -- send_signal to client context
-            local ok, err = status:incr(resp, 1)
+            local ok, err = shmem:set(index, data, 300, 3)
             if not ok then
                 ngx.log(ngx.DEBUG, "error in incr")
             end
@@ -227,13 +215,12 @@ tirex_handler = function (premature, shmem)
     end
     udpsock:close()
     -- call myself
-    timerat(0.1, tirex_handler, status)
+    timerat(0.1, tirex_handler)
 end
 -- ========================================================
 
 function push_request_tirex_render(self, index, req)
-    local status = self.shmem
-    return status:safe_add(index, req, 0, 0)
+    return shmem:set(index, req, 0, 1)
 end
 
 
@@ -241,7 +228,6 @@ end
 --  enqueue request to tirex server
 --
 function request_tirex_render(map, mx, my, mz, id)
-    local status = self.shmem
     -- Create request command
     local index = format("%s:%d:%d:%d",map, mx, my, mz)
     local priority = 8
@@ -258,7 +244,7 @@ function request_tirex_render(map, mx, my, mz, id)
     local handle = get_handle('_tirex_handler', 0, 0)
     if handle then
         -- only single light thread can handle Tirex
-        timerat(0, tirex_handler, status)
+        timerat(0, tirex_handler)
     end
 
     return true
@@ -275,7 +261,7 @@ function send_tirex_request (self, map, x, y, z)
     local id = ngx_time()
     local index = format("%s:%d:%d:%d",map, mx, my, mz)
 
-    local ok, err = get_handle(index, tirex_sync_duration, id)
+    local ok, err = get_handle(index, 300, 0)
     if not ok then
         -- someone have already start Tirex session
         -- wait other side(*), sync..
