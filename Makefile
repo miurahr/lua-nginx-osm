@@ -8,6 +8,6 @@ INSTALL ?= install
 all: ;
 
 install: all
-	$(INSTALL) -d $(DESTDIR)/$(LUA_LIB_DIR)/osm
-	$(INSTALL) lib/osm/*.lua $(DESTDIR)/$(LUA_LIB_DIR)/osm
+	$(INSTALL) -d $(DESTDIR)/$(LUA_LIB_DIR)/openstreetmap
+	$(INSTALL) lib/openstreetmap/*.lua $(DESTDIR)/$(LUA_LIB_DIR)/openstreetmap
 
