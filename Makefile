@@ -9,5 +9,5 @@ all: ;
 
 install: all
 	$(INSTALL) -d $(DESTDIR)/$(LUA_LIB_DIR)/osm
-	$(INSTALL) lib/osm/*.lua $(DESTDIR)/$(LUA_LIB_DIR)/osm
+	$(INSTALL) osm/*.lua $(DESTDIR)/$(LUA_LIB_DIR)/osm
 
