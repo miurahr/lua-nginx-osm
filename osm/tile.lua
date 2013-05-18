@@ -133,11 +133,10 @@ local function get_offset (buffer, offset)
     return ((buffer:byte(offset+4) * 256 + buffer:byte(offset+3)) * 256 + buffer:byte(offset+2)) * 256 + buffer:byte(offset+1)
 end
 
--- function send
--- arguments map, x, y, z
--- return ngx.OK or nil
+-- function get_tile
+-- arguments metatile filename, x, y
+-- return png or nil
 -- 
---  send back tile to client from metatile
 --
 function get_tile(metafilename, x, y)
     local imgfile = metafilename
