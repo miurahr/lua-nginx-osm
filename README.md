@@ -54,11 +54,14 @@ Synopsis
                 -- check x, y, z supported to generate
                 local region = data.get_region("japan")
                 if not osm_tile.is_inside_region(region, x, y, z)
+                    -- try upstream server?
                     return ngx.exit(ngx.HTTP_FORBIDDEN)
                 end
                 
-                -- try renderd file.
-                local png, err = tile.get_tile(map, x, y, z)
+                -- try renderd file
+                local tilefile = tile.xyz_to_metatile_filename(x, y, z)
+                local tilepath = tirex_tilepath.."/"..map.."/"..tilefile
+                local png, err = tile.get_tile(tilepath, x, y, z)
                 if png then
                     ngx.header.content_type = "image/png"
                     ngx.print(png)
@@ -72,9 +75,7 @@ Synopsis
                 end
 
                 -- get tile image from metatile
-                local tilefile = tile.xyz_to_metatile_filename(x, y, z)
-                local tilepath = tirex_tilepath.."/"..map.."/"..tilefile
-                local png, err = osm_tile.get_tile(tilepath, x, y, z)
+                local png, err = tile.get_tile(tilepath, x, y, z)
                 if png then
                     ngx.header.content_type = "image/png"
                     ngx.print(png)
@@ -147,7 +148,7 @@ This can use for region_include()
 Now provide following area/country data:
 
     japan
-    world wide
+    world
 
 
 Tirex Methods
