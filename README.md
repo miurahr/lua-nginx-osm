@@ -18,6 +18,9 @@ http://wiki.nginx.org/HttpLuaModule
 This Lua library takes advantage of ngx_lua's cosocket API, which ensures 
 100% nonblocking behavior.
 
+It also includes utility to handle metatile, URIs in Lua language.
+These utility is not depend on nginx, means pure lua implementation.
+
 Note that at least [ngx_lua 0.8.1](https://github.com/chaoslawful/lua-nginx-module/tags) is required.
 
 Synopsis
@@ -143,7 +146,7 @@ Data methods
 **syntax:** * region = data.get_region("japan"))*
  
 Get region definition table of argument country/area.
-This can use for region_include()
+This can use for is_inside_region() method.
 
 Now provide following area/country data:
 
@@ -167,20 +170,34 @@ If request fails return nil.
 TODO
 ====
 
+* design stable API
+
+* build more data definitions
+
+* add more tirex methods
+
+* easy way for shared memory(dictionary) definition
+
+* object oriented interface
+
+* and more on issue tracker.
+
+
 Community
 =========
 
 English Mailing List
 --------------------
 
-The [osm-dev](https://lists.openstreetmap.org/lists/osm-dev) mailing list is for English speakers.
-It is for all topic about development  openstreetmap.
+The [tile-serving](https://lists.openstreetmap.org/lists/tile-serving) mailing list is for English speakers.
+It is for all topic about tile serving development of openstreetmap, not only this project.
 
-Japanese Mailing List
+Web Chat 
 --------------------
 
-The [OSM-ja](https://lists.openstreetmap.org/lists/talk-ja) mailing list is for Japanese speakers.
-It is for all topic about openstreetmap in Japanese or in Japan.
+The [osmfj-devel](http://lingr.com/signup?letmein=osmfj_devel) web chat is in Japanese/English.
+It is a chat room mainly for OSM Japan site and related software development.
+
 
 Bugs and Patches
 ================
