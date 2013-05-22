@@ -148,6 +148,7 @@ This can use for region_include()
 Now provide following area/country data:
 
     japan
+    asia
     world
 
 
