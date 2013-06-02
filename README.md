@@ -206,6 +206,10 @@ Please report bugs or submit patches by
 
 1. creating a ticket on the [GitHub Issue Tracker](http://github.com/miurahr/lua-nginx-osm/issues),
 
+1. There are known problem that Tirex cannot response properly so we use workaround in lua-nginx-osm
+
+  https://trac.openstreetmap.org/ticket/4869
+
 Author
 ======
 

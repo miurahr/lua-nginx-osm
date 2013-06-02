@@ -45,7 +45,7 @@ local setmetatable = setmetatable
 
 module(...)
 
-_VERSION = '0.10'
+_VERSION = '0.20'
 
 -- ------------------------------------
 -- Syncronize thread functions
@@ -96,6 +96,7 @@ function get_handle(key, timeout, flag)
     return nil, ''
 end
 
+
 -- return nil if timeout in wait
 --
 function wait_signal(key, timeout)
@@ -145,73 +146,20 @@ function deserialize_msg (str)
 end
 
 -- ========================================================
---  It does not share context and global vals/funcs
---
-local tirex_handler
-tirex_handler = function (premature)
-    local tirexsock = 'unix:/var/run/tirex/master.sock'
-    local tirex_cmd_max_size = 512
-    local shmem = ngx.shared.osm_tirex
 
-    if premature then
-        -- clean up
-        shmem:delete('_tirex_handler')
-        return
-    end
 
-    local udpsock = ngx.socket.udp()
-    udpsock:setpeername(tirexsock)
-
-    for i = 0, 10000 do
-        -- send all requests first...
-        local indexes = shmem:get_keys(10)
-        for key,index in pairs(indexes) do
-	    if index ~= '_tirex_handler' then
-                local req, flag = shmem:get(index)
-		if flag == 1 then
-                    local ok,err=udpsock:send(req)
-                    if not ok then
-                        ngx.log(ngx.DEBUG, err)
-                    else
-                        shmem:replace(index, req, 300, 2)
-	            end
-                end
-            end
-        end
-        -- then receive response
-        local data, err = udpsock:receive(tirex_cmd_max_size)
-        if data then
-            -- deserialize
-            local msg = {}
-            for line in gmatch(data, "[^\n]+") do
-                m,_,k,v = find(line,"([^=]+)=(.+)")
-                if  k ~= '' then
-                    msg[k]=v
-                end
-            end
-            local index = format("%s:%d:%d:%d", msg["map"], msg["x"], msg["y"], msg["z"])
-
-            -- send_signal to client context
-            local ok, err = shmem:set(index, data, 300, 3)
-            if not ok then
-                ngx.log(ngx.DEBUG, "error in incr")
-            end
-        else
-            ngx.log(ngx.DEBUG, err)
-        end
-    end
-    udpsock:close()
-    -- call myself
-    timerat(0.1, tirex_handler)
-end
 
 -- function: request_tirex_render
 --  enqueue request to tirex server
 --
-function request_render(map, mx, my, mz, id)
+function request_render(map, mx, my, mz, id, priority)
+    local tirexsock = 'unix:/var/run/tirex/master.sock'
+    local tirex_cmd_max_size = 512
+    local udpsock = ngx.socket.udp()
+    udpsock:setpeername(tirexsock)
+    
     -- Create request command
     local index = format("%s:%d:%d:%d",map, mx, my, mz)
-    local priority = 8
     local req = serialize_msg({
         ["id"]   = tostring(id);
         ["type"] = 'metatile_enqueue_request';
@@ -220,17 +168,42 @@ function request_render(map, mx, my, mz, id)
         ["x"]    = mx;
         ["y"]    = my;
         ["z"]    = mz})
-    local ok, err, forcible = shmem:set(index, req, 0, 1)
+--    local ok, err, forcible = shmem:set(index, req, 0, 1) --record request
+--    if not ok then
+--        return nil, err
+--    end
+
+    local ok,err=udpsock:send(req)
     if not ok then
-        return nil, err
+        ngx.log(ngx.DEBUG, err)
+        udpsock:close()
+        return nil
+--    else
+--        shmem:replace(index, req, 300, 2) -- requested
+	end
+    -- then receive response
+    local data, err = udpsock:receive(tirex_cmd_max_size)
+    if not data then
+        ngx.log(ngx.DEBUG, err)
+        udpsock:close()
+        return nil
     end
 
-    local handle = get_handle('_tirex_handler', 0, 0)
-    if handle then
-        -- only single light thread can handle Tirex
-        timerat(0, tirex_handler)
+    -- deserialize
+    local msg = {}
+    for line in gmatch(data, "[^\n]+") do
+        m,_,k,v = find(line,"([^=]+)=(.+)")
+        if  k ~= '' then
+            msg[k]=v
+        end
     end
 
+    local index = format("%s:%d:%d:%d", msg["map"], msg["x"], msg["y"], msg["z"])
+    local ok, err = shmem:set(index, data, 300, 3) -- send signal
+    if not ok then
+        ngx.log(ngx.DEBUG, err)
+    end
+    udpsock:close()
     return true
 end
 
@@ -243,6 +216,7 @@ function send_request (map, x, y, z)
     local my = y - y % 8
     local mz = z
     local id = time()
+    local priority = 8
     local index = format("%s:%d:%d:%d",map, mx, my, mz)
 
     local ok, err = get_handle(index, 300, 0)
@@ -253,7 +227,7 @@ function send_request (map, x, y, z)
     end
 
     -- Ask Tirex session
-    local ok = request_render(map, mx, my, mz, id)
+    local ok = request_render(map, mx, my, mz, id, priority)
     if not ok then
         return nil
     end

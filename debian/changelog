@@ -1,3 +1,10 @@
+lua-nginx-osm (0.19-1) precise; urgency=low
+
+  * remove Tirex buf workaround
+  * test for 0.20 version
+
+ -- Hiroshi Miura <miurahr@linux.com>  Sun, 02 Jun 2013 14:46:07 +0900
+
 lua-nginx-osm (0.10-2) precise; urgency=low
 
   * Add tirex dependency
