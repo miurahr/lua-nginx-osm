@@ -21,7 +21,6 @@
 local shmem = ngx.shared.osm_tirex
 
 local udp = ngx.socket.udp
-local timerat = ngx.timer.at
 local time = ngx.time
 local null = ngx.null
 local sleep = ngx.sleep
@@ -43,6 +42,9 @@ local tostring = tostring
 local error = error
 local setmetatable = setmetatable
 
+local tirexsock = 'unix:/var/run/tirex/master.sock'
+local tirex_cmd_max_size = 512
+
 module(...)
 
 _VERSION = '0.20'
@@ -59,15 +61,15 @@ _VERSION = '0.20'
 --
 --   thread(2)
 --       get_handle(key) fails then
---       wait_singal(key)
+--       wait_singal(key, timeout, expect)
 --       return result what thread(1) done
 --
 --   to syncronize amoung nginx threads
 --   we use ngx.shared.DICT interface.
 --   
---   Here we use ngx.shared.stats
+--   Here we use ngx.shared.osm_tirex
 --   you need to set /etc/conf.d/lua.conf
---      ngx_shared_dict stats 10m; 
+--      ngx_shared_dict osm_tirex 10m; 
 --
 --   if these functions returns 'nil'
 --   status is undefined
@@ -76,8 +78,8 @@ _VERSION = '0.20'
 --   status definitions
 --    key is not exist:    neutral
 --    key is exist: someone got work token
---       val = 0:     now working
---       val > 0:     work is finished
+--       flag = 0:     now working
+--       flag = 3:     work is finished
 --
 --    key will be expired in timeout sec
 --    we can use same key after timeout passed
@@ -96,6 +98,9 @@ function get_handle(key, timeout, flag)
     return nil, ''
 end
 
+function remove_handle(key)
+    return shmem:delete(key)
+end
 
 -- return nil if timeout in wait
 --
@@ -137,7 +142,7 @@ end
 function deserialize_msg (str) 
     local msg = {}
     for line in gmatch(str, "[^\n]+") do
-        m,_,k,v = find(line,"([^=]+)=(.+)")
+        local m,_,k,v = find(line,"([^=]+)=(.+)")
         if  k ~= '' then
             msg[k]=v
         end
@@ -147,19 +152,35 @@ end
 
 -- ========================================================
 
+function get_key(map, mx, my, mz)
+    return format("%s:%d:%d:%d",map, mx, my, mz)
+end
 
+-- function: send_tirex_request
+function send_tirex_request(req)
+    local udpsock = udp()
+    udpsock:setpeername(tirexsock)
 
--- function: request_tirex_render
+    local ok,err=udpsock:send(req)
+    if not ok then
+        udpsock:close()
+        return nil
+    end
+    -- then receive response
+    local data, err = udpsock:receive(tirex_cmd_max_size)
+    udpsock:close()
+    if not data then
+        return nil
+    end
+
+    return deserialize_msg(data)
+end
+
+-- function: request_render
 --  enqueue request to tirex server
 --
 function request_render(map, mx, my, mz, id, priority)
-    local tirexsock = 'unix:/var/run/tirex/master.sock'
-    local tirex_cmd_max_size = 512
-    local udpsock = ngx.socket.udp()
-    udpsock:setpeername(tirexsock)
-    
     -- Create request command
-    local index = format("%s:%d:%d:%d",map, mx, my, mz)
     local req = serialize_msg({
         ["id"]   = tostring(id);
         ["type"] = 'metatile_enqueue_request';
@@ -168,56 +189,42 @@ function request_render(map, mx, my, mz, id, priority)
         ["x"]    = mx;
         ["y"]    = my;
         ["z"]    = mz})
---    local ok, err, forcible = shmem:set(index, req, 0, 1) --record request
---    if not ok then
---        return nil, err
---    end
+    local msg = send_tirex_request(req)
 
-    local ok,err=udpsock:send(req)
-    if not ok then
-        ngx.log(ngx.DEBUG, err)
-        udpsock:close()
-        return nil
---    else
---        shmem:replace(index, req, 300, 2) -- requested
-	end
-    -- then receive response
-    local data, err = udpsock:receive(tirex_cmd_max_size)
-    if not data then
-        ngx.log(ngx.DEBUG, err)
-        udpsock:close()
+    if not msg then
+        -- propagate error to waiting context
+        local index = get_key(map, mx, my, mz)
+        remove_handle(index)
         return nil
     end
-
-    -- deserialize
-    local msg = {}
-    for line in gmatch(data, "[^\n]+") do
-        m,_,k,v = find(line,"([^=]+)=(.+)")
-        if  k ~= '' then
-            msg[k]=v
-        end
-    end
-
-    local index = format("%s:%d:%d:%d", msg["map"], msg["x"], msg["y"], msg["z"])
+    local index = get_key(msg["map"], msg["x"], msg["y"], msg["z"])
     local ok, err = shmem:set(index, data, 300, 3) -- send signal
     if not ok then
-        ngx.log(ngx.DEBUG, err)
+        return nil
     end
-    udpsock:close()
     return true
 end
+
 
 -- funtion: send_request
 -- argument: map, x, y, z
 -- return:   true or nil
 --
 function send_request (map, x, y, z)
+    return enqueue_request(map, x, y, z, 0)
+end
+
+-- funtion: enqueue_request
+-- argument: map, x, y, z
+-- return:   true or nil
+--
+function enqueue_request (map, x, y, z, priority)
     local mx = x - x % 8
     local my = y - y % 8
     local mz = z
     local id = time()
-    local priority = 8
-    local index = format("%s:%d:%d:%d",map, mx, my, mz)
+    local priority = tonumber(priority)
+    local index = get_key(map, mx, my, mz)
 
     local ok, err = get_handle(index, 300, 0)
     if not ok then
@@ -231,7 +238,48 @@ function send_request (map, x, y, z)
     if not ok then
         return nil
     end
-    return wait_signal(index, 30)
+end
+
+-- funtion: dequeue_request
+-- argument: map, x, y, z
+-- return:   true or nil
+--
+function dequeue_request (map, x, y, z, priority)
+    local mx = x - x % 8
+    local my = y - y % 8
+    local mz = z
+    local id = time()
+    local priority = tonumber(priority)
+        
+    -- Create request command
+    local req = serialize_msg({
+        ["id"]   = tostring(id);
+        ["type"] = 'metatile_remove_request';
+        ["prio"] = priority;
+        ["map"]  = map;
+        ["x"]    = mx;
+        ["y"]    = my;
+        ["z"]    = mz})
+    local ok = send_tirex_request(req)
+    if not ok then
+        return nil
+    end
+end
+
+-- function: ping_request()
+-- return: true or nil
+function ping_request()
+    -- Create request command
+    local req = serialize_msg({
+        ["type"] = 'ping'})
+    local msg = send_tirex_request(req)
+    if not msg then
+        return nil
+    end
+    if msg["result"] ~= 'ok' then
+        return nil
+    end
+    return true
 end
 
 local class_mt = {

@@ -166,6 +166,27 @@ send_request
 Request enqueue command to rendering map 'map' with x/y/z cordination.
 If request fails return nil.
 
+It is old (0.10) interface.
+
+enqueue_request
+-------------
+
+**syntax:** *result = osm.tirex.enqueue_request(map, x, y, z, priority)*
+
+Request enqueue command to rendering map 'map' with x/y/z cordination and 
+priority.
+If request fails return nil.
+
+
+dequeue_request
+-------------
+
+**syntax:** *result = osm.tirex.dequeue_request(map, x, y, z, priority)*
+
+Request dequeue command to rendering map 'map' with x/y/z cordination and 
+priority.
+If request fails return nil.
+
 
 TODO
 ====
@@ -206,7 +227,7 @@ Please report bugs or submit patches by
 
 1. creating a ticket on the [GitHub Issue Tracker](http://github.com/miurahr/lua-nginx-osm/issues),
 
-1. There are known problem that Tirex cannot response properly so we use workaround in lua-nginx-osm
+1. There are known problem that Tirex cannot response properly so we need to patch tirex.
 
   https://trac.openstreetmap.org/ticket/4869
 
