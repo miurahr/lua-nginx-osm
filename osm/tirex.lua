@@ -65,11 +65,7 @@ _VERSION = '0.20'
 --   Here we use ngx.shared.osm_tirex
 --   you need to set /etc/conf.d/lua.conf
 --      ngx_shared_dict osm_tirex 10m; 
---
---   if these functions returns 'nil'
---   status is undefined
---   something wrong
---
+
 --   status definitions
 --    key is not exist:    neutral
 --    key is exist: someone got work token
@@ -88,23 +84,31 @@ _VERSION = '0.20'
 function get_handle(key, timeout, flag)
     local success,err,forcible = shmem:add(key, 0, timeout, flag)
     if success ~= false then
-        return key, ''
+        return true
     end
-    return nil, ''
+    return nil
 end
 
 function remove_handle(key)
     return shmem:delete(key)
 end
 
+function send_signal(key, timeout, fl)
+    local ok, err = shmem:set(key, 0, timeout, fl)
+    if not ok then
+        return nil
+    end
+    return true 
+end
+
 -- return nil if timeout in wait
 --
-function wait_signal(key, timeout)
-    local timeout = tonumber(timeout)
+function wait_signal(key, timeout, fl)
+    local timeout = tonumber(timeout) * 2
     for i=0, timeout do
         local val, flag = shmem:get(key)
         if val then
-            if flag == 3 then
+            if flag == fl then
                 return true
             end
             sleep(0.5)
@@ -147,15 +151,14 @@ end
 
 -- ========================================================
 
-function get_key(map, mx, my, mz)
-    return format("%s:%d:%d:%d",map, mx, my, mz)
+function get_key(t, map, mx, my, mz)
+    return format("%s:%s:%d:%d:%d",t, map, mx, my, mz)
 end
 
 -- function: send_tirex_request
 function send_tirex_request(req)
     local udpsock = udp()
     udpsock:setpeername(tirexsock)
-
     local ok,err=udpsock:send(req)
     if not ok then
         udpsock:close()
@@ -169,37 +172,6 @@ function send_tirex_request(req)
     end
     local msg = deserialize_msg(data)
     return msg
-end
-
--- function: request_render
---  enqueue request to tirex server
---
-function request_render(map, mx, my, mz, id, priority)
-    -- Create request command
-    local req = serialize_msg({
-        ["id"]   = tostring(id);
-        ["type"] = 'metatile_enqueue_request';
-        ["prio"] = priority;
-        ["map"]  = map;
-        ["x"]    = mx;
-        ["y"]    = my;
-        ["z"]    = mz})
-    local index = get_key(map, mx, my, mz)
-    shmem:set(index, req, 300, 1) 
-    local msg = send_tirex_request(req)
-
---  problematic for now.
---    if not msg then
-        -- propagate error to waiting context
---        remove_handle(index)
---        return nil
---    end
-    local index = get_key(msg["map"], msg["x"], msg["y"], msg["z"])
-    local ok, err = shmem:set(index, data, 300, 3) -- send signal
-    if not ok then
-        return nil
-    end
-    return true
 end
 
 -- funtion: send_request
@@ -220,19 +192,22 @@ function enqueue_request (map, x, y, z, priority)
     local mz = z
     local id = time()
     local priority = tonumber(priority)
-    local index = get_key(map, mx, my, mz)
-    local ok, err = get_handle(index, 300, 0)
+    local index = get_key("enq", map, mx, my, mz)
+    local ok = get_handle(index, 300, 0)
     if not ok then
-        -- someone have already start Tirex session
-        -- wait other side(*), sync..
-        return wait_signal(index, 30)
+        return wait_signal(index, 30, 3) -- flag = 3
     end
-
-    -- Ask Tirex session
-    local ok = request_render(map, mx, my, mz, id, priority)
-    if not ok then
-        return nil
-    end
+    local req = serialize_msg({
+        ["id"]   = tostring(id);
+        ["type"] = 'metatile_enqueue_request';
+        ["prio"] = priority;
+        ["map"]  = map;
+        ["x"]    = mx;
+        ["y"]    = my;
+        ["z"]    = mz})
+    local msg = send_tirex_request(req)
+    local index = get_key("enq", msg["map"], msg["x"], msg["y"], msg["z"])
+    return send_signal(index, 300, 3) -- flag = 3
 end
 
 -- funtion: dequeue_request
@@ -245,6 +220,11 @@ function dequeue_request (map, x, y, z, priority)
     local mz = z
     local id = time()
     local priority = tonumber(priority)
+    local index = get_key("deq", map, mx, my, mz)
+    local ok = get_handle(index, 300, 0)
+    if not ok then
+        return wait_signal(index, 30, 3)
+    end
     local req = serialize_msg({
         ["id"]   = tostring(id);
         ["type"] = 'metatile_remove_request';
@@ -253,9 +233,9 @@ function dequeue_request (map, x, y, z, priority)
         ["x"]    = mx;
         ["y"]    = my;
         ["z"]    = mz})
-    local ok = send_tirex_request(req)
-    if not ok then
-        return nil
+    local msg = send_tirex_request(req)
+    if ok then
+        send_signal(index, 300, 3)
     end
 end
 
