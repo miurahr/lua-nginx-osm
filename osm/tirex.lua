@@ -24,9 +24,6 @@ local udp = ngx.socket.udp
 local time = ngx.time
 local sleep = ngx.sleep
 
-local insert = table.insert
-local concat = table.concat
-
 local sub = string.sub
 local len = string.len
 local find = string.find
@@ -110,7 +107,7 @@ function wait_signal(key, timeout)
             if flag == 3 then
                 return true
             end
-            sleep(1)
+            sleep(0.5)
         else
             return nil
         end
@@ -170,8 +167,8 @@ function send_tirex_request(req)
     if not data then
         return nil
     end
-
-    return deserialize_msg(data)
+    local msg = deserialize_msg(data)
+    return msg
 end
 
 -- function: request_render
@@ -188,14 +185,15 @@ function request_render(map, mx, my, mz, id, priority)
         ["y"]    = my;
         ["z"]    = mz})
     local index = get_key(map, mx, my, mz)
-    shmem:set(index, data, 120, 1) 
+    shmem:set(index, req, 300, 1) 
     local msg = send_tirex_request(req)
 
-    if not msg then
+--  problematic for now.
+--    if not msg then
         -- propagate error to waiting context
-        remove_handle(index)
-        return nil
-    end
+--        remove_handle(index)
+--        return nil
+--    end
     local index = get_key(msg["map"], msg["x"], msg["y"], msg["z"])
     local ok, err = shmem:set(index, data, 300, 3) -- send signal
     if not ok then
@@ -203,7 +201,6 @@ function request_render(map, mx, my, mz, id, priority)
     end
     return true
 end
-
 
 -- funtion: send_request
 -- argument: map, x, y, z
@@ -224,7 +221,6 @@ function enqueue_request (map, x, y, z, priority)
     local id = time()
     local priority = tonumber(priority)
     local index = get_key(map, mx, my, mz)
-
     local ok, err = get_handle(index, 300, 0)
     if not ok then
         -- someone have already start Tirex session
@@ -249,8 +245,6 @@ function dequeue_request (map, x, y, z, priority)
     local mz = z
     local id = time()
     local priority = tonumber(priority)
-        
-    -- Create request command
     local req = serialize_msg({
         ["id"]   = tostring(id);
         ["type"] = 'metatile_remove_request';
@@ -269,8 +263,7 @@ end
 -- return: true or nil
 function ping_request()
     -- Create request command
-    local req = serialize_msg({
-        ["type"] = 'ping'})
+    local req = serialize_msg({["type"] = 'ping'})
     local msg = send_tirex_request(req)
     if not msg then
         return nil
