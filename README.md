@@ -26,7 +26,7 @@ Note that at least [ngx_lua 0.7.20](https://github.com/chaoslawful/lua-nginx-mod
 and tested on [ngx_lua 0.8.1](https://github.com/chaoslawful/lua-nginx-module/tags).
 
 If you use Ubuntu Linux 12.04 (LTS) and after, there is a PPA(private package archive) for you.
-http://launchpad.net/~osmjapan/ppa
+http://launchpad.net/~osmjapan/+archive/ppa
 Please see the above page for detail instructions.
 
 Synopsis
