@@ -22,7 +22,6 @@ local shmem = ngx.shared.osm_tirex
 
 local udp = ngx.socket.udp
 local time = ngx.time
-local null = ngx.null
 local sleep = ngx.sleep
 
 local insert = table.insert
@@ -36,7 +35,6 @@ local format = string.format
 
 local pairs = pairs
 local unpack = unpack
-local setmetatable = setmetatable
 local tonumber = tonumber
 local tostring = tostring
 local error = error
@@ -61,7 +59,7 @@ _VERSION = '0.20'
 --
 --   thread(2)
 --       get_handle(key) fails then
---       wait_singal(key, timeout, expect)
+--       wait_singal(key, timeout)
 --       return result what thread(1) done
 --
 --   to syncronize amoung nginx threads
@@ -189,11 +187,12 @@ function request_render(map, mx, my, mz, id, priority)
         ["x"]    = mx;
         ["y"]    = my;
         ["z"]    = mz})
+    local index = get_key(map, mx, my, mz)
+    shmem:set(index, data, 120, 1) 
     local msg = send_tirex_request(req)
 
     if not msg then
         -- propagate error to waiting context
-        local index = get_key(map, mx, my, mz)
         remove_handle(index)
         return nil
     end
@@ -211,7 +210,7 @@ end
 -- return:   true or nil
 --
 function send_request (map, x, y, z)
-    return enqueue_request(map, x, y, z, 0)
+    return enqueue_request(map, x, y, z, 1)
 end
 
 -- funtion: enqueue_request

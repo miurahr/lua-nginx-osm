@@ -6,7 +6,8 @@ lua-nginx-osm - Lua Tirex client driver for the ngx_lua based on the cosocket AP
 Status
 ======
 
-This library is considered experimental status.
+Current version is 0.20, 1, June, 2013.
+This library is considered active development status.
 
 Description
 ===========
@@ -21,14 +22,14 @@ This Lua library takes advantage of ngx_lua's cosocket API, which ensures
 It also includes utility to handle metatile, URIs in Lua language.
 These utility is not depend on nginx, means pure lua implementation.
 
-Note that at least [ngx_lua 0.8.1](https://github.com/chaoslawful/lua-nginx-module/tags) is required.
+Note that at least [ngx_lua 0.7.20](https://github.com/chaoslawful/lua-nginx-module/tags) is required 
+and tested on [ngx_lua 0.8.1].
 
 Synopsis
 ========
 
     lua_package_path "/path/to/lua-nginx-osm/?.lua;;";
     lua_shared_dict osm_tirex 10m; ## mandatory to use osm.tirex module
-    lua_socket_log_errors off;
 
     server {
         location /example {
@@ -166,7 +167,7 @@ send_request
 Request enqueue command to rendering map 'map' with x/y/z cordination.
 If request fails return nil.
 
-It is old (0.10) interface.
+It is obsolete (0.10) interface.
 
 enqueue_request
 -------------
@@ -186,6 +187,14 @@ dequeue_request
 Request dequeue command to rendering map 'map' with x/y/z cordination and 
 priority.
 If request fails return nil.
+
+
+ping_request
+-------------
+
+**syntax:** *result = osm.tirex.ping_request()*
+
+Request ping command. If request fails return nil.
 
 
 TODO
