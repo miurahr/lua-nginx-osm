@@ -6,7 +6,7 @@ lua-nginx-osm - Lua Tirex client driver for the ngx_lua based on the cosocket AP
 Status
 ======
 
-Current version is 0.20, 1, June, 2013.
+Current version is 0.20, 3, June, 2013.
 This library is considered active development status.
 
 Description
@@ -23,7 +23,11 @@ It also includes utility to handle metatile, URIs in Lua language.
 These utility is not depend on nginx, means pure lua implementation.
 
 Note that at least [ngx_lua 0.7.20](https://github.com/chaoslawful/lua-nginx-module/tags) is required 
-and tested on [ngx_lua 0.8.1].
+and tested on [ngx_lua 0.8.1](https://github.com/chaoslawful/lua-nginx-module/tags).
+
+If you use Ubuntu Linux 12.04 (LTS) and after, there is a PPA(private package archive) for you.
+http://launchpad.net/~osmjapan/ppa
+Please see the above page for detail instructions.
 
 Synopsis
 ========
@@ -236,9 +240,12 @@ Please report bugs or submit patches by
 
 1. creating a ticket on the [GitHub Issue Tracker](http://github.com/miurahr/lua-nginx-osm/issues),
 
-1. There are known problem that Tirex cannot response properly so we need to patch tirex.
+1. There are known problem that Tirex cannot response properly so we need to patch to tirex.
 
   https://trac.openstreetmap.org/ticket/4869
+  
+  If you use Tirex 0.4.1(original)  or  tirex-0.4.1ppa4 and below, you need to patch to tirex.
+  Here is a patch file in misc/tirex-peer.diff.
 
 Author
 ======
@@ -249,8 +256,9 @@ Copyright and License
 =====================
 
 Hiroshi Miura, 2013 
+OpenStreetMap Foundation Japan, 2013
 
-Distributed under GPLv3
+Distributed under GPLv3 License.
 
 See Also
 ========
