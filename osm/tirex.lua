@@ -22,6 +22,7 @@ local shmem = ngx.shared.osm_tirex
 
 local udp = ngx.socket.udp
 local time = ngx.time
+local timerat = ngx.timer.at
 local sleep = ngx.sleep
 
 local sub = string.sub
@@ -35,14 +36,17 @@ local unpack = unpack
 local tonumber = tonumber
 local tostring = tostring
 local error = error
+local assert = assert
 local setmetatable = setmetatable
 
-local tirexsock = 'unix:/var/run/tirex/master.sock'
-local tirex_cmd_max_size = 512
+local osm_tile = require 'osm.tile'
 
 module(...)
 
 _VERSION = '0.20'
+
+local tirexsock = 'unix:/var/run/tirex/master.sock'
+local tirex_cmd_max_size = 512
 
 -- ------------------------------------
 -- Syncronize thread functions
@@ -67,10 +71,16 @@ _VERSION = '0.20'
 --      ngx_shared_dict osm_tirex 10m; 
 
 --   status definitions
---    key is not exist:    neutral
---    key is exist: someone got work token
---       flag = 0:     now working
---       flag = 3:     work is finished
+--    key is not exist: no work exist
+--    key is exist: someone start working.
+--       flag = 0:just start process
+--                val = arbitary value
+--       flag = 1:requested for worker to handle
+--                val = request command string
+--       flag = 2:already ask to tirex to render
+--                val = arbitary value
+--       flag = 3:rendering is finished
+--                val = result
 --
 --    key will be expired in timeout sec
 --    we can use same key after timeout passed
@@ -81,7 +91,7 @@ _VERSION = '0.20'
 --  if key exist, it returns false
 --  else it returns true
 --
-function get_handle(key, timeout, flag)
+local function get_handle(key, timeout, flag)
     local success,err,forcible = shmem:add(key, 0, timeout, flag)
     if success ~= false then
         return true
@@ -89,11 +99,19 @@ function get_handle(key, timeout, flag)
     return nil
 end
 
-function remove_handle(key)
+-- function: remove_handle
+-- argument: string key
+-- return: nil if failed
+local function remove_handle(key)
     return shmem:delete(key)
 end
 
-function send_signal(key, timeout, fl)
+-- function: send_signal
+-- argument: string key
+--           number timeout in sec
+--           number flag to send
+-- return nil when failed
+local function send_signal(key, timeout, fl)
     local ok, err = shmem:set(key, 0, timeout, fl)
     if not ok then
         return nil
@@ -101,17 +119,25 @@ function send_signal(key, timeout, fl)
     return true 
 end
 
+local function round(num, idp)
+  return tonumber(string.format("%." .. (idp or 0) .. "f", num))
+end
+
+-- function: wait signal
+-- argument: string key
+--           number timeout in second
+--           number flag to wait
 -- return nil if timeout in wait
 --
-function wait_signal(key, timeout, fl)
-    local timeout = tonumber(timeout) * 2
+local function wait_signal(key, timeout, fl)
+    local timeout = round(timeout, 1) * 10
     for i=0, timeout do
         local val, flag = shmem:get(key)
         if val then
             if flag == fl then
                 return true
             end
-            sleep(0.5)
+            sleep(0.1)
         else
             return nil
         end
@@ -125,7 +151,7 @@ end
 -- return: string
 --     should be 'key1=val1\nkey2=val2\n....\n'
 --
-function serialize_msg (msg)
+local function serialize_msg (msg)
     local str = ''
     for k,v in pairs(msg) do
         str = str .. k .. '=' .. tostring(v) .. '\n'
@@ -138,7 +164,7 @@ end
 --     should be 'key1=val1\nkey2=val2\n....\n'
 -- return: table
 --     hash table {key1=val1, key2=val2,....}
-function deserialize_msg (str) 
+local function deserialize_msg (str)
     local msg = {}
     for line in gmatch(str, "[^\n]+") do
         local m,_,k,v = find(line,"([^=]+)=(.+)")
@@ -149,14 +175,114 @@ function deserialize_msg (str)
     return msg
 end
 
--- ========================================================
-
-function get_key(t, map, mx, my, mz)
+local function get_key(t, map, mx, my, mz)
     return format("%s:%s:%d:%d:%d",t, map, mx, my, mz)
 end
 
+-- ========================================================
+--  It does not share context and global vals/funcs
+--
+
+local tirex_bk_handler
+tirex_bk_handler = function (premature)
+    local tirexsock = 'unix:/var/run/tirex/master.sock'
+    local tirex_cmd_max_size = 512
+    local shmem = ngx.shared.osm_tirex
+
+    -- here we cannot refer func so define again
+    local deserialize_msg = function (str)
+        local msg = {}
+        for line in gmatch(str, "[^\n]+") do
+            local m,_,k,v = find(line,"([^=]+)=(.+)")
+            if  k ~= '' then
+                msg[k]=v
+            end
+        end
+        return msg
+    end
+
+    if premature then
+        -- clean up
+        shmem:delete('_tirex_handler')
+        return
+    end
+
+    local udpsock = ngx.socket.udp()
+    udpsock:setpeername(tirexsock)
+    udpsock:settimeout(0)
+
+    while true do
+        -- ngx.select(shmem, udpsock)
+        -- send requests first...
+        local indexes = shmem:get_keys()
+        for key,index in pairs(indexes) do
+            if index ~= '_tirex_handler' then
+                local req, flag = shmem:get(index)
+                if flag == 1 then
+                    local ok,err=udpsock:send(req)
+                    if ok then
+                        shmem:replace(index, 0, 300, 2)
+                    end
+                end
+            end
+        end
+
+        sleep(0.1)
+
+        -- then receive response
+        udpsock:settimeout(0)
+        local data, err = udpsock:receive(tirex_cmd_max_size)
+        if data then
+            local msg = deserialize_msg(data)
+            local index = format("%s:%s:%d:%d:%d", "enq", msg["map"], msg["x"], msg["y"], msg["z"])
+            local res = msg["result"]
+            --send_signal to client context
+            local ok, err = shmem:set(index, res, 300, 3)
+            if not ok then
+                ngx.log(ngx.DEBUG, err)
+            end
+        else
+            -- err can be 'timeout', 'partial write', 'closed', 
+            -- 'buffer too small' or 'out of memory'
+            -- do nothing at this time
+        end
+    end
+    udpsock:close()
+end
+
+function background_enqueue_request(map, x, y, z, priority)
+    local mx = x - x % 8
+    local my = y - y % 8
+    local mz = z
+    local id = time()
+    local priority = tonumber(priority)
+    local index = format("%s:%s:%d:%d:%d","enq", map, mx, my, mz)
+    local req = serialize_msg({
+        ["id"]   = tostring(id);
+        ["type"] = 'metatile_enqueue_request';
+        ["prio"] = priority;
+        ["map"]  = map;
+        ["x"]    = mx;
+        ["y"]    = my;
+        ["z"]    = mz})
+    local ok, err, forcible = shmem:set(index, req, 0, 1)
+    if not ok then
+        return nil, err
+    end
+
+    local handle = get_handle('_tirex_handler', 0, 0)
+    if handle then
+        -- only single light thread can handle Tirex
+        timerat(0, tirex_bk_handler)
+    end
+
+    return true
+end
+
+
 -- function: send_tirex_request
-function send_tirex_request(req)
+-- return: resulted msg{}
+local function send_tirex_request(req)
     local udpsock = udp()
     udpsock:setpeername(tirexsock)
     local ok,err=udpsock:send(req)
@@ -164,7 +290,6 @@ function send_tirex_request(req)
         udpsock:close()
         return nil
     end
-    -- then receive response
     local data, err = udpsock:receive(tirex_cmd_max_size)
     udpsock:close()
     if not data then
@@ -182,8 +307,18 @@ function send_request (map, x, y, z)
     return enqueue_request(map, x, y, z, 1)
 end
 
+--[[
+Buckets definition in default
+  Name                 Priority
+  ------------------------------
+  live                   1-   9
+  important             10-  19
+  background            20-
+  ------------------------------
+--]]
 -- funtion: enqueue_request
--- argument: map, x, y, z
+-- argument: map, x, y, zoom, priority
+--     priority = 1-10 for live requests
 -- return:   true or nil
 --
 function enqueue_request (map, x, y, z, priority)
@@ -211,7 +346,7 @@ function enqueue_request (map, x, y, z, priority)
 end
 
 -- funtion: dequeue_request
--- argument: map, x, y, z
+-- argument: map, x, y, z, priority
 -- return:   true or nil
 --
 function dequeue_request (map, x, y, z, priority)
@@ -250,6 +385,31 @@ function ping_request()
     end
     if msg["result"] ~= 'ok' then
         return nil
+    end
+    return true
+end
+
+-- funtion: enqueue_request_with_larger_zoom
+-- argument: map, x, y, zoom, maxzoom, priority
+-- return:   true or nil
+--
+function enqueue_request_with_larger_zoom (map, x, y, z1, z2, priority)
+    local z2 = tonumber(z2)
+    local z1 = tonumber(z1)
+    if z1 >= z2 then
+        return nil
+    end
+    local priority = tonumber(priority)
+    local np = priority + 10
+    -- assume that live priority is processed on 'live' and is in 1-9 range.
+    -- and larger zoom rendering is on 'important' in 10-19 range.
+    local res = enqueue_request(map, x, y, z1, priority)
+    if not res then
+        return nil
+    end
+    for i = 1, z2 - z1 do
+        local nx, ny = osm_tile.zoom_num(x, y, z1, z1 + i)
+        background_enqueue_request(map, nx, ny, z1 + i, np + i)
     end
     return true
 end
