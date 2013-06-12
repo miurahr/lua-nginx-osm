@@ -71,29 +71,41 @@ local tirex_cmd_max_size = 512
 --      ngx_shared_dict osm_tirex 10m; 
 
 --   status definitions
---    key is not exist: no work exist
---    key is exist: someone start working.
---       flag = 0:just start process
---                val = arbitary value
---       flag = 1:requested for worker to handle
---                val = request command string
---       flag = 2:already ask to tirex to render
---                val = arbitary value
---       flag = 3:rendering is finished
---                val = result
+--    key is not exist: no job exist for its x/y/z
+--    key is exist: job exist
 --
---    key will be expired in timeout sec
---    we can use same key after timeout passed
+--       key := <map>:<x>:<y>:<zoom>
+--       val := <req> | <result>
+--       flag := <status>
+--
+--       <x>, <y>, <zoom> := <integer>
+--       <req> := string: request command string
+--       <result> := string: result string
+--       <status> := <gothandle> | <request> | <send> | <succeeded> | <failed>
+--
+--    key will be expired in timeout(sec)
 --
 -- ------------------------------------
-
+local GOTHANDLE =   0
+local REQUEST   = 100
+local SEND      = 200
+local SUCCEEDED = 300
+local FAILED    = 400
 --
 --  if key exist, it returns false
 --  else it returns true
 --
-local function get_handle(key, timeout, flag)
-    local success,err,forcible = shmem:add(key, 0, timeout, flag)
+local function get_handle(key, val, timeout, flag)
+    local success,err,forcible = shmem:add(key, val, timeout, flag)
     if success ~= false then
+        return true
+    end
+    local prev_val, prev_flag = shmem:get(key)
+    prev_flag = tonumber(prev_flag)
+    prev_msg = deserialize_msg(prev_val)
+    msg = deserialize_msg(val)
+    if prev_flag < SUCCEEDED and prev_msg["priority"] > msg["priority"] then
+        shmem:replace(key, val, timeout, flag)
         return true
     end
     return nil
@@ -111,8 +123,8 @@ end
 --           number timeout in sec
 --           number flag to send
 -- return nil when failed
-local function send_signal(key, timeout, fl)
-    local ok, err = shmem:set(key, 0, timeout, fl)
+local function send_signal(key, timeout, flag)
+    local ok, err = shmem:set(key, 0, timeout, flag)
     if not ok then
         return nil
     end
@@ -129,13 +141,17 @@ end
 --           number flag to wait
 -- return nil if timeout in wait
 --
-local function wait_signal(key, timeout, fl)
+local function wait_signal(key, timeout)
     local timeout = round(timeout, 1) * 10
     for i=0, timeout do
         local val, flag = shmem:get(key)
         if val then
-            if flag == fl then
+            if flag == SUCCEEDED then
                 return true
+            elseif flag == FAILED then
+                return nil
+            else
+                -- do nothing
             end
             sleep(0.1)
         else
@@ -175,8 +191,8 @@ local function deserialize_msg (str)
     return msg
 end
 
-local function get_key(t, map, mx, my, mz)
-    return format("%s:%s:%d:%d:%d",t, map, mx, my, mz)
+local function get_key(map, mx, my, mz)
+    return format("%s:%d:%d:%d", map, mx, my, mz)
 end
 
 -- ========================================================
@@ -216,13 +232,11 @@ tirex_bk_handler = function (premature)
         -- send requests first...
         local indexes = shmem:get_keys()
         for key,index in pairs(indexes) do
-            if index ~= '_tirex_handler' then
-                local req, flag = shmem:get(index)
-                if flag == 1 then
-                    local ok,err=udpsock:send(req)
-                    if ok then
-                        shmem:replace(index, 0, 300, 2)
-                    end
+            local req, flag = shmem:get(index)
+            if flag == REQUEST then
+                local ok,err=udpsock:send(req)
+                if ok then
+                    shmem:replace(index, req, 300, SEND)
                 end
             end
         end
@@ -234,10 +248,15 @@ tirex_bk_handler = function (premature)
         local data, err = udpsock:receive(tirex_cmd_max_size)
         if data then
             local msg = deserialize_msg(data)
-            local index = format("%s:%s:%d:%d:%d", "enq", msg["map"], msg["x"], msg["y"], msg["z"])
+            local index = get_key(msg["map"], msg["x"], msg["y"], msg["z"])
             local res = msg["result"]
             --send_signal to client context
-            local ok, err = shmem:set(index, res, 300, 3)
+            local ok
+            if res == "ok" then
+                ok, err = shmem:set(index, res, 300, SUCCEEDED)
+            else
+                ok, err = shmem:set(index, res, 300, FAILED)
+            end
             if not ok then
                 ngx.log(ngx.DEBUG, err)
             end
@@ -250,13 +269,13 @@ tirex_bk_handler = function (premature)
     udpsock:close()
 end
 
-function background_enqueue_request(map, x, y, z, priority)
+local function background_enqueue_request(map, x, y, z, priority)
     local mx = x - x % 8
     local my = y - y % 8
     local mz = z
     local id = time()
     local priority = tonumber(priority)
-    local index = format("%s:%s:%d:%d:%d","enq", map, mx, my, mz)
+    local index = get_key(map, mx, my, mz)
     local req = serialize_msg({
         ["id"]   = tostring(id);
         ["type"] = 'metatile_enqueue_request';
@@ -265,12 +284,16 @@ function background_enqueue_request(map, x, y, z, priority)
         ["x"]    = mx;
         ["y"]    = my;
         ["z"]    = mz})
-    local ok, err, forcible = shmem:set(index, req, 0, 1)
+    local success,err,forcible = shmem:add(index, req, 300, GOTHANDLE)
+    if not ok then
+        return nil
+    end
+    local ok, err, forcible = shmem:set(index, req, 0, REQUEST)
     if not ok then
         return nil, err
     end
 
-    local handle = get_handle('_tirex_handler', 0, 0)
+    local handle = get_handle('_tirex_handler', 0, 0, GOTHANDLE)
     if handle then
         -- only single light thread can handle Tirex
         timerat(0, tirex_bk_handler)
@@ -327,11 +350,7 @@ function enqueue_request (map, x, y, z, priority)
     local mz = z
     local id = time()
     local priority = tonumber(priority)
-    local index = get_key("enq", map, mx, my, mz)
-    local ok = get_handle(index, 300, 0)
-    if not ok then
-        return wait_signal(index, 30, 3) -- flag = 3
-    end
+    local index = get_key(map, mx, my, mz)
     local req = serialize_msg({
         ["id"]   = tostring(id);
         ["type"] = 'metatile_enqueue_request';
@@ -340,9 +359,18 @@ function enqueue_request (map, x, y, z, priority)
         ["x"]    = mx;
         ["y"]    = my;
         ["z"]    = mz})
+    local ok = get_handle(index, req, 300, GOTHANDLE)
+    if not ok then
+        return wait_signal(index, 30)
+    end
     local msg = send_tirex_request(req)
-    local index = get_key("enq", msg["map"], msg["x"], msg["y"], msg["z"])
-    return send_signal(index, 300, 3) -- flag = 3
+    local index = get_key(msg["map"], msg["x"], msg["y"], msg["z"])
+    local res = msg["result"]
+    if res == "ok" then
+        return send_signal(index, 300, SUCCEEDED)
+    else
+        return send_signal(index, 300, FAILED)
+    end
 end
 
 -- funtion: dequeue_request
@@ -355,11 +383,7 @@ function dequeue_request (map, x, y, z, priority)
     local mz = z
     local id = time()
     local priority = tonumber(priority)
-    local index = get_key("deq", map, mx, my, mz)
-    local ok = get_handle(index, 300, 0)
-    if not ok then
-        return wait_signal(index, 30, 3)
-    end
+    local index = get_key(map, mx, my, mz)
     local req = serialize_msg({
         ["id"]   = tostring(id);
         ["type"] = 'metatile_remove_request';
@@ -368,9 +392,18 @@ function dequeue_request (map, x, y, z, priority)
         ["x"]    = mx;
         ["y"]    = my;
         ["z"]    = mz})
+    local ok = get_handle(index, req, 300, GOTHANDLE)
+    if not ok then
+        return wait_signal(index, 30)
+    end
     local msg = send_tirex_request(req)
-    if ok then
-        send_signal(index, 300, 3)
+    if msg then
+        local res = msg["result"]
+        if res == "ok" then
+            return send_signal(index, 300, SUCCEEDED)
+        else
+            return send_signal(index, 300, FAILED)
+        end
     end
 end
 
