@@ -6,7 +6,7 @@ lua-nginx-osm - Lua Tirex client driver for the ngx_lua based on the cosocket AP
 Status
 ======
 
-Current version is 0.20, 3, June, 2013.
+Current version is 0.30, 15, June, 2013.
 This library is considered active development status.
 
 Description
@@ -22,8 +22,7 @@ This Lua library takes advantage of ngx_lua's cosocket API, which ensures
 It also includes utility to handle metatile, URIs in Lua language.
 These utility is not depend on nginx, means pure lua implementation.
 
-Note that at least [ngx_lua 0.7.20](https://github.com/chaoslawful/lua-nginx-module/tags) is required 
-and tested on [ngx_lua 0.8.1](https://github.com/chaoslawful/lua-nginx-module/tags).
+Note that at least [ngx_lua 0.8.1](https://github.com/chaoslawful/lua-nginx-module/tags) is required.
 
 If you use Ubuntu Linux 12.04 (LTS) and after, there is a PPA(private package archive) for you.
 http://launchpad.net/~osmjapan/+archive/ppa
@@ -163,6 +162,39 @@ Now provide following area/country data:
 Tirex Methods
 =======
 
+request
+-------------
+
+**syntax:** *result = osm.tirex.request(map, x, y, z1, z2, priority)*
+
+Request enqueue command to rendering map 'map' with x/y/z1 cordination and 
+priority. And also request to render in background between zoom z1 to z2. 
+If request fails return nil.
+
+When z1 == z2, just ask to render single tile.
+
+
+cancel
+-------------
+
+**syntax:** *result = osm.tirex.cancel(map, x, y, z1, z2, priority)*
+
+Request dequeue command to rendering map 'map' with x/y/z1 cordination and 
+priority.And also request to cancel in background between zoom z1 to z2. 
+If request fails return nil.
+
+
+ping
+-------------
+
+**syntax:** *result = osm.tirex.ping()*
+
+Request ping command. If request fails return nil.
+
+
+Obsolete functions
+=============
+
 send_request
 -------------
 
@@ -171,7 +203,6 @@ send_request
 Request enqueue command to rendering map 'map' with x/y/z cordination.
 If request fails return nil.
 
-It is obsolete (0.10) interface.
 
 enqueue_request
 -------------
@@ -181,7 +212,6 @@ enqueue_request
 Request enqueue command to rendering map 'map' with x/y/z cordination and 
 priority.
 If request fails return nil.
-
 
 dequeue_request
 -------------
@@ -193,26 +223,10 @@ priority.
 If request fails return nil.
 
 
-ping_request
--------------
-
-**syntax:** *result = osm.tirex.ping_request()*
-
-Request ping command. If request fails return nil.
-
-
 TODO
 ====
 
-* design stable API
-
 * build more data definitions
-
-* add more tirex methods
-
-* easy way for shared memory(dictionary) definition
-
-* object oriented interface
 
 * and more on issue tracker.
 

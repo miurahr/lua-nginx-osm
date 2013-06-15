@@ -43,7 +43,7 @@ local osm_tile = require 'osm.tile'
 
 module(...)
 
-_VERSION = '0.20'
+_VERSION = '0.30'
 
 local tirexsock = 'unix:/var/run/tirex/master.sock'
 local tirex_cmd_max_size = 512
@@ -407,9 +407,9 @@ function dequeue_request (map, x, y, z, priority)
     end
 end
 
--- function: ping_request()
+-- function: ping()
 -- return: true or nil
-function ping_request()
+function ping()
     -- Create request command
     local req = serialize_msg({["type"] = 'ping'})
     local msg = send_tirex_request(req)
@@ -426,10 +426,10 @@ end
 -- argument: map, x, y, zoom, maxzoom, priority
 -- return:   true or nil
 --
-function enqueue_request_with_larger_zoom (map, x, y, z1, z2, priority)
+function request (map, x, y, z1, z2, priority)
     local z2 = tonumber(z2)
     local z1 = tonumber(z1)
-    if z1 >= z2 then
+    if z1 > z2 then
         return nil
     end
     local priority = tonumber(priority)
@@ -440,9 +440,26 @@ function enqueue_request_with_larger_zoom (map, x, y, z1, z2, priority)
     if not res then
         return nil
     end
+    if z1 == z2 then
+        return true
+    end
     for i = 1, z2 - z1 do
         local nx, ny = osm_tile.zoom_num(x, y, z1, z1 + i)
         background_enqueue_request(map, nx, ny, z1 + i, np + i)
+    end
+    return true
+end
+
+function cancel (map, x, y, z1, z2, prirority)
+    local z2 = tonumber(z2)
+    local z1 = tonumber(z1)
+    if z1 > z2 then
+        return nil
+    end
+    local priority = tonumber(priority)
+    for i = 0, z2 - z1 do
+        local nx, ny = osm_tile.zoom_num(x, y, z1, z1 + i)
+        dequeue_request(map, nx, ny, z1 + i, priority)
     end
     return true
 end
