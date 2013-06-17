@@ -91,32 +91,6 @@ local REQUEST   = 100
 local SEND      = 200
 local SUCCEEDED = 300
 local FAILED    = 400
---
---  if key exist, it returns false
---  else it returns true
---
-local function get_handle(key, val, timeout, flag)
-    local success,err,forcible = shmem:add(key, val, timeout, flag)
-    if success ~= false then
-        return true
-    end
-    local prev_val, prev_flag = shmem:get(key)
-    prev_flag = tonumber(prev_flag)
-    prev_msg = deserialize_msg(prev_val)
-    msg = deserialize_msg(val)
-    if prev_flag < SUCCEEDED and prev_msg["priority"] > msg["priority"] then
-        shmem:replace(key, val, timeout, flag)
-        return true
-    end
-    return nil
-end
-
--- function: remove_handle
--- argument: string key
--- return: nil if failed
-local function remove_handle(key)
-    return shmem:delete(key)
-end
 
 -- function: send_signal
 -- argument: string key
@@ -193,6 +167,35 @@ end
 
 local function get_key(map, mx, my, mz)
     return format("%s:%d:%d:%d", map, mx, my, mz)
+end
+
+--
+--  if key exist, it returns false
+--  else it returns true
+--
+local function get_handle(key, val, timeout, flag)
+    local success,err,forcible = shmem:add(key, val, timeout, flag)
+    if success ~= false then
+        return true
+    end
+    local prev_val, prev_flag = shmem:get(key)
+    local prev_flag = tonumber(prev_flag)
+    if prev_flag < SUCCEEDED then
+        local prev_msg = deserialize_msg(prev_val)
+        local msg = deserialize_msg(val)
+        if prev_msg["priority"] > msg["priority"] then
+            shmem:replace(key, val, timeout, flag)
+            return true
+        end
+    end
+    return nil
+end
+
+-- function: remove_handle
+-- argument: string key
+-- return: nil if failed
+local function remove_handle(key)
+    return shmem:delete(key)
 end
 
 -- ========================================================
@@ -293,7 +296,7 @@ local function background_enqueue_request(map, x, y, z, priority)
         return nil, err
     end
 
-    local handle = get_handle('_tirex_handler', 0, 0, GOTHANDLE)
+    local handle = get_handle('_tirex_handler', 0, 0, SUCCEEDED)
     if handle then
         -- only single light thread can handle Tirex
         timerat(0, tirex_bk_handler)
@@ -364,6 +367,9 @@ function enqueue_request (map, x, y, z, priority)
         return wait_signal(index, 30)
     end
     local msg = send_tirex_request(req)
+    if not msg then
+        return send_signal(index, 300, FAILED)
+    end
     local index = get_key(msg["map"], msg["x"], msg["y"], msg["z"])
     local res = msg["result"]
     if res == "ok" then
