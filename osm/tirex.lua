@@ -91,6 +91,7 @@ local REQUEST   = 100
 local SEND      = 200
 local SUCCEEDED = 300
 local FAILED    = 400
+local SPECIAL   = 999
 
 -- function: send_signal
 -- argument: string key
@@ -106,7 +107,7 @@ local function send_signal(key, timeout, flag)
 end
 
 local function round(num, idp)
-  return tonumber(string.format("%." .. (idp or 0) .. "f", num))
+  return tonumber(format("%." .. (idp or 0) .. "f", num))
 end
 
 -- function: wait signal
@@ -201,12 +202,15 @@ end
 -- ========================================================
 --  It does not share context and global vals/funcs
 --
-
 local tirex_bk_handler
 tirex_bk_handler = function (premature)
     local tirexsock = 'unix:/var/run/tirex/master.sock'
     local tirex_cmd_max_size = 512
     local shmem = ngx.shared.osm_tirex
+    local REQUEST   = 100
+    local SEND      = 200
+    local SUCCEEDED = 300
+    local FAILED    = 400
 
     -- here we cannot refer func so define again
     local deserialize_msg = function (str)
@@ -256,12 +260,9 @@ tirex_bk_handler = function (premature)
             --send_signal to client context
             local ok
             if res == "ok" then
-                ok, err = shmem:set(index, res, 300, SUCCEEDED)
+                shmem:set(index, res, 300, SUCCEEDED)
             else
-                ok, err = shmem:set(index, res, 300, FAILED)
-            end
-            if not ok then
-                ngx.log(ngx.DEBUG, err)
+                shmem:set(index, res, 300, FAILED)
             end
         else
             -- err can be 'timeout', 'partial write', 'closed', 
@@ -287,16 +288,11 @@ local function background_enqueue_request(map, x, y, z, priority)
         ["x"]    = mx;
         ["y"]    = my;
         ["z"]    = mz})
-    local success,err,forcible = shmem:add(index, req, 300, GOTHANDLE)
+    local ok = get_handle(index, req, 300, REQUEST)
     if not ok then
         return nil
     end
-    local ok, err, forcible = shmem:set(index, req, 0, REQUEST)
-    if not ok then
-        return nil, err
-    end
-
-    local handle = get_handle('_tirex_handler', 0, 0, SUCCEEDED)
+    local handle = get_handle('_tirex_handler', 0, 0, SPECIAL)
     if handle then
         -- only single light thread can handle Tirex
         timerat(0, tirex_bk_handler)
