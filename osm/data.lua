@@ -24,10 +24,11 @@ local myname = ...
 
 module(...)
 
-_VERSION = '0.10'
+_VERSION = '0.30'
 
 local target = {
     ['japan'] = myname .. '.japan',
+    ['asia']  = myname .. '.asia',
     ['world'] = myname .. '.world'
   }
 
