@@ -176,18 +176,25 @@ end
 --
 local function get_handle(key, val, timeout, flag)
     local success,err,forcible = shmem:add(key, val, timeout, flag)
-    if success ~= false then
-        return true
-    end
-    local prev_val, prev_flag = shmem:get(key)
-    local prev_flag = tonumber(prev_flag)
-    if prev_flag < SUCCEEDED then
-        local prev_msg = deserialize_msg(prev_val)
-        local msg = deserialize_msg(val)
-        if prev_msg["priority"] > msg["priority"] then
-            shmem:replace(key, val, timeout, flag)
-            return true
+    if success == false then
+	if err == 'exists' then
+            local prev_val, prev_flag = shmem:get(key)
+            local prev_flag = tonumber(prev_flag)
+            if prev_flag < SUCCEEDED then
+                local prev_msg = deserialize_msg(prev_val)
+                local msg = deserialize_msg(val)
+                if prev_msg and prev_msg["prio"] > msg["prio"] then
+                    shmem:replace(key, val, timeout, flag)
+                    return true
+		end
+	    else
+	        return nil
+	    end
+	else
+	    return nil
         end
+    else
+        return true
     end
     return nil
 end
