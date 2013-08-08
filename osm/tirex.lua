@@ -179,7 +179,7 @@ local function get_handle(key, val, timeout, flag)
     if success == false then
 	if err == 'exists' then
             local prev_val, prev_flag = shmem:get(key)
-            local prev_flag = tonumber(prev_flag)
+            local prev_flag = tonumber(prev_flag) or 0
             if prev_flag < SUCCEEDED then
                 local prev_msg = deserialize_msg(prev_val)
                 local msg = deserialize_msg(val)
