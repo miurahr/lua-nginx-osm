@@ -27,9 +27,11 @@ module(...)
 _VERSION = '0.30'
 
 local target = {
-    ['japan'] = myname .. '.japan',
-    ['asia']  = myname .. '.asia',
-    ['world'] = myname .. '.world'
+    ['japan']   = myname .. '.japan',
+    ['asia']    = myname .. '.asia',
+    ['europe']  = myname .. '.europe',
+    ['africa']  = myname .. '.africa',
+    ['world']   = myname .. '.world'
   }
 
 function get_region(name)
