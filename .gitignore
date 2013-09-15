@@ -7,3 +7,8 @@ reindex
 tags
 debian/trash
 debian/backup
+utils/CMakeCache.txt
+utils/CMakeFiles/
+utils/Makefile
+utils/cmake_install.cmake
+utils/poly2lua
