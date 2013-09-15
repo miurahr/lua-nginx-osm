@@ -42,7 +42,20 @@ local target = {
     ['world']   = myname .. '.world'
   }
 
+local world = {
+   {
+    {lon=-180, lat=-89.9},
+    {lon=-180, lat=89.9},
+    {lon=180, lat=89.9},
+    {lon=180, lat=-89.9},
+    {lon=-180, lat=-89.9}
+   }
+}
+
 function get_region(name)
+    if name == 'world' then
+        return world
+    end
     if not target[name] then
         return nil
     end
