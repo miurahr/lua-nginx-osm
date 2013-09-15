@@ -8,9 +8,11 @@ KML2POLY = utils/kml2poly.py
 
 DATA = osm/data
 REGIONS = $(DATA)/japan.lua $(DATA)/asia.lua $(DATA)/africa.lua \
-		  $(DATA)/europe.lua $(DATA)/canada.lua
-REGDATA = $(DATA)/japan.kml $(DATA)/asia.kml $(DATA)/africa.kml \
-		  $(DATA)/europe.kml $(DATA)/canada.kml
+		  $(DATA)/europe.lua $(DATA)/canada.lua \
+		  $(DATA)/australia-oceania.lua $(DATA)/alps.lua \
+		  $(DATA)/central-america.lua $(DATA)/france.lua \
+		  $(DATA)/germany.lua $(DATA)/india.lua \
+		  $(DATA)/north-america.lua
 
 .PHONY: all install
 
