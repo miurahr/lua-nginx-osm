@@ -27,10 +27,18 @@ module(...)
 _VERSION = '0.30'
 
 local target = {
-    ['japan']   = myname .. '.japan',
-    ['asia']    = myname .. '.asia',
-    ['europe']  = myname .. '.europe',
     ['africa']  = myname .. '.africa',
+    ['asia']    = myname .. '.asia',
+    ['alps']    = myname .. '.alps',
+    ['canada']  = myname .. '.canada',
+    ['europe']  = myname .. '.europe',
+    ['france']  = myname .. '.france',
+    ['germany'] = myname .. '.germany',
+    ['india']   = myname .. '.india',
+    ['japan']   = myname .. '.japan',
+    ['australia-oceania'] = myname .. '.australia-oceania',
+    ['central-america']   = myname .. '.central-america',
+    ['north-america'] = myname .. '.north-america',
     ['world']   = myname .. '.world'
   }
 
