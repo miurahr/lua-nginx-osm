@@ -2,7 +2,7 @@ Source: lua-nginx-osm
 Section: interpreters
 Priority: optional
 Maintainer: Hiroshi Miura <miurahr@osmf.jp>
-Build-Depends: debhelper (>= 8), dh-lua
+Build-Depends: debhelper (>= 8), dh-lua, python, libcgal-dev, cmake (>= 2.8.4), g++, make
 Standards-Version: 3.9.3
 Homepage: https://github.com/miurahr/lua-nginx-osm
 
