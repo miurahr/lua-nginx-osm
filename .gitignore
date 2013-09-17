@@ -12,4 +12,3 @@ utils/CMakeFiles/
 utils/Makefile
 utils/cmake_install.cmake
 utils/poly2lua
-osm/data/*.lua
