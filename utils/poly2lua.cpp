@@ -5,6 +5,7 @@
 #include <CGAL/partition_2.h>
 #include <CGAL/point_generators_2.h>
 #include <CGAL/random_polygon_2.h>
+#include <CGAL/Polygon_2.h>
 #include <list>
 #include <iostream>
 #include <fstream>
@@ -57,12 +58,16 @@ int main(int argc, char *argv[])
     Validity_traits       validity_traits;
 
     int testmode = 0;
+    int debugmode = 0;
     int c;
     opterr = 0;
-    while ((c = getopt (argc, argv, "t")) != -1)
+    while ((c = getopt (argc, argv, "td")) != -1)
     switch (c) {
         case 't':
             testmode = 1;
+            break;
+        case 'd':
+            debugmode = 1;
             break;
         case '?':
             if (isprint (optopt))
@@ -89,11 +94,17 @@ int main(int argc, char *argv[])
                                     partition_traits);
 
   std::cout << "local region = {" << std::endl;
-  for (std::list<Polygon_2>::iterator pit = partition_polys.begin(); 
+  for (std::list<Polygon_2>::iterator pit = partition_polys.begin();
                                       pit != partition_polys.end();
-                                    ++pit)
+                                    ++pit){
       print_polygon(*pit);
-  std::cout << "}" << std::endl << "return region" << std::endl;
+      if (debugmode) {
+            // check if the polygon is convex
+            std::cerr << "The polygon is " <<
+                ((*pit).is_convex() ? "" : "not ") << "convex." << std::endl;
+      }
+   }
+   std::cout << "}" << std::endl << "return region" << std::endl;
    return 0;
 }
 
