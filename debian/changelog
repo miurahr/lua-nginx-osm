@@ -1,6 +1,6 @@
-lua-nginx-osm (0.31) precise; urgency=low
+lua-nginx-osm (0.40) precise; urgency=low
 
-  * New version: many region detection data.
+  * New version: add many region data.
 
  -- Hiroshi Miura <miurahr@linux.com>  Sun, 15 Sep 2013 11:04:55 +0900
 

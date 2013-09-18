@@ -6,7 +6,7 @@ lua-nginx-osm - Lua Tirex client driver for the ngx_lua based on the cosocket AP
 Status
 ======
 
-Current version is 0.30, 29, June, 2013.
+Current version is 0.40, 19, September, 2013.
 This library is considered active development status.
 
 Description
