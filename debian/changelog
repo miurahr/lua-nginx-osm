@@ -1,3 +1,9 @@
+lua-nginx-osm (0.41) precise; urgency=low
+
+  * Excape PPA problem with incrementing version.
+
+ -- Hiroshi Miura <miurahr@linux.com>  Sun, 22 Sep 2013 12:47:08 +0900
+
 lua-nginx-osm (0.40) precise; urgency=low
 
   * New version: add many region data.
