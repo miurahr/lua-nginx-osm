@@ -16,6 +16,11 @@ $(POLY2LUA): utils/poly2lua.cpp utils/CMakeLists.txt
 	(cd utils/poly2lua; cmake ../)
 	$(MAKE) -C utils/poly2lua
 
+test:
+	cd tests \
+	lua5.1 test_tile.lua;\
+	lua5.1 test_inside.lua
+
 data:
 	$(MAKE) -C $(DATA) all
 
