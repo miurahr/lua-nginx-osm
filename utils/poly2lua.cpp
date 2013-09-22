@@ -25,14 +25,14 @@ typedef CGAL::Random_points_in_square_2<Point_2, Creator>   Point_generator;
 using std::cout; using std::endl;
 
 template<class Kernel, class Container>
-void print_polygon (const CGAL::Polygon_2<Kernel, Container>& P)
+void print_polygon_lua (const CGAL::Polygon_2<Kernel, Container>& P)
 {
   typename CGAL::Polygon_2<Kernel, Container>::Vertex_const_iterator vit,vit_b;
 
   std::cout << "{" << std::endl;
   for (vit = vit_b = P.vertices_begin(); vit != P.vertices_end(); ++vit)
-    std::cout << " {" << std::setprecision(9)  << vit->x() << "," << vit->y() << "}," << std::endl;
-  std::cout << " {" << std::setprecision(9) << vit_b->x() << "," << vit_b->y() << "}," << std::endl;
+    std::cout << " {lon=" << std::setprecision(9)  << vit->x() << ",lat=" << vit->y() << "}," << std::endl;
+  std::cout << " {lon=" << std::setprecision(9) << vit_b->x() << ",lat=" << vit_b->y() << "}," << std::endl;
   std::cout << " }," << std::endl;
 }
 
@@ -97,7 +97,7 @@ int main(int argc, char *argv[])
   for (std::list<Polygon_2>::iterator pit = partition_polys.begin();
                                       pit != partition_polys.end();
                                     ++pit){
-      print_polygon(*pit);
+      print_polygon_lua(*pit);
       if (debugmode) {
             // check if the polygon is convex
             std::cerr << "The polygon is " <<
