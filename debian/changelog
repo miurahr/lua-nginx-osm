@@ -1,3 +1,9 @@
+lua-nginx-osm (0.42) precise; urgency=low
+
+  * Update dependency to allow nginx-openresty for nginx/lua server.
+
+ -- Hiroshi Miura <miurahr@linux.com>  Mon, 30 Sep 2013 07:57:03 +0900
+
 lua-nginx-osm (0.41) precise; urgency=low
 
   * Excape PPA problem with incrementing version.
