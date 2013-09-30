@@ -8,7 +8,7 @@ Homepage: https://github.com/miurahr/lua-nginx-osm
 
 Package: lua-nginx-osm
 Architecture: all
-Depends: ${shlibs:Depends}, ${misc:Depends}, {nginx-extras|nginx-openresty} (>= 1.4.1), lua-bitop
+Depends: ${shlibs:Depends}, ${misc:Depends}, nginx-extras | nginx-openresty (>= 1.4.1), lua-bitop
 Recommends: tirex-core
 Suggests: tirex-example-map, tirex-backend-mapnik, tirex-backend-mapserver, 
           tirex-backend-wms

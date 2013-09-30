@@ -1,3 +1,9 @@
+lua-nginx-osm (0.43) precise; urgency=low
+
+  * Fix debian dependency error.
+
+ -- Hiroshi Miura <miurahr@linux.com>  Mon, 30 Sep 2013 20:43:38 +0900
+
 lua-nginx-osm (0.42) precise; urgency=low
 
   * Update dependency to allow nginx-openresty for nginx/lua server.
