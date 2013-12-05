@@ -81,9 +81,8 @@ end
 function is_inside_region(region, x, y, z)
     -- check inclusion of polygon
     local nx, ny = zoom_num(x, y, z, 20)
-    local includes = nil
     for _, b in pairs(region) do
-        local x1=nil
+        local x1 = nil
         local y1 = nil
         local tmp_inc = true
         for _, v in pairs(b) do
@@ -92,16 +91,17 @@ function is_inside_region(region, x, y, z)
                 local res = (y1 - y2) * nx + (x2 - x1) * ny + x1 * y2 - x2 * y1
                 if res < 0 then
                     tmp_inc = nil
+                    break
                 end
             end
-            x1=x2
-            y1=y2
+            x1 = x2
+            y1 = y2
         end
         if tmp_inc == true then
-            includes = true
+            return true
         end
     end
-    return includes
+    return nil
 end
 
 
