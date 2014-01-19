@@ -279,3 +279,7 @@ See Also
 * the ngx_lua module: http://wiki.nginx.org/HttpLuaModule
 
 
+
+
+[![Bitdeli Badge](https://d2weczhvl823v0.cloudfront.net/miurahr/lua-nginx-osm/trend.png)](https://bitdeli.com/free "Bitdeli Badge")
+
