@@ -1,3 +1,10 @@
+lua-nginx-osm (0.44) precise; urgency=low
+
+  * Fix north-america data missing.
+  * Fix missing data in package.
+
+ -- Hiroshi Miura <miurahr@linux.com>  Mon, 14 Apr 2014 08:03:25 +0900
+
 lua-nginx-osm (0.43) precise; urgency=low
 
   * Fix debian dependency error.

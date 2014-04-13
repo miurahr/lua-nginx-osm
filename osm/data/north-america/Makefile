@@ -3,7 +3,7 @@ KML2POLY = ../../../utils/kml2poly.py
 
 REGION = north-america
 REGIONS_DATA =  \
-         canada.lua greenland.lua us-midwest.lua us-northwest.lua \
+         canada.lua greenland.lua us-midwest.lua us-northeast.lua \
          us-pacific.lua us-south.lua us-west.lua
 
 .PHONY: all
